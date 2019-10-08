@@ -1,0 +1,54 @@
+[{
+		"key": "note_on",
+		"value": 1,
+		"commands": [{
+			"type": "transitionToScene",
+			"target": "Scene 2"
+		}]
+	},
+	{
+		"key": "note_on",
+		"value": 2,
+		"commands": [{
+			"type": "transitionToPreviousScene"
+		}]
+	},
+	{
+		"key": "note_on",
+		"value": 3,
+		"commands": [{
+			"type": "hideAllSources"
+		}]
+	},
+	{
+		"key": "note_on",
+		"value": 4,
+		"commands": [{
+			"type": "showAllSources"
+		}]
+	},
+	{
+		"key": "note_on",
+		"value": 5,
+		"commands": [{
+			"type": "hideSource",
+			"target": "Display Capture"
+		}]
+	},
+	{
+		"key": "note_on",
+		"value": 6,
+		"commands": [{
+			"type": "showSource",
+			"target": "Display Capture"
+		}]
+	},
+	{
+		"key": "note_on",
+		"value": 7,
+		"commands": [{
+			"type": "toggleSource",
+			"target": "Display Capture"
+		}]
+	}
+]
