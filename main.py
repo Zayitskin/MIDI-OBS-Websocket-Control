@@ -59,13 +59,6 @@ class WebsocketHandler:
             await websocket.send(json.dumps(msg))
             self.obs.requests[msg["message-id"]] = msg["request-type"]
 
-    def parse(self, msg):
-        
-        key, value = msg.split(" ")
-        value = int(value)
-        for command in self.config[key][value]:
-            self.requests.append(Request(self.id, command, self.obs))
-
 class MIDIWebsocketHandler(WebsocketHandler):
 
     def __init__(self, config, port):
@@ -79,6 +72,17 @@ class MIDIWebsocketHandler(WebsocketHandler):
                 if option.startswith(port):
                     self.port = option
                     break
+
+    def parse(self, msg):
+        
+        key = msg.type
+        if key == "note_on" or key == "note_off":
+            value = msg.note
+        elif key == "program_change":
+            value = msg.channel
+        value = int(value)
+        for command in self.config[key][value]:
+            self.requests.append(Request(self.id, command, self.obs))
 
     async def run(self):
 
@@ -115,6 +119,13 @@ class GUIWebsocketHandler(WebsocketHandler):
     def __del__(self):
 
         self.process.join()
+
+    def parse(self, msg):
+        
+        key, value = msg.split(" ")
+        value = int(value)
+        for command in self.config[key][value]:
+            self.requests.append(Request(self.id, command, self.obs))
 
     async def run(self):
         
