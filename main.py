@@ -158,6 +158,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", type = str, choices = ["midi", "gui", "scan"])
     parser.add_argument("-config", type = str, default = "settings.json")
+    parser.add_argument("-port", type = str)
     args = parser.parse_args()
 
     if args.mode == "midi":
