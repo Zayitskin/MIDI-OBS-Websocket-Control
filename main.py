@@ -86,7 +86,7 @@ class MIDIWebsocketHandler(WebsocketHandler):
 
     async def run(self):
 
-        async with mido.open_input(self.port) as port:
+        with mido.open_input(self.port) as port:
             async with websockets.connect("ws://localhost:4444") as websocket:
 
                 readTask = asyncio.create_task(self.read(websocket))
