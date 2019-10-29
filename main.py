@@ -60,6 +60,8 @@ class WebsocketHandler:
     async def send(self, websocket, request):
 
         for msg in request:
+            if msg == None:
+                continue
             await websocket.send(json.dumps(msg))
             self.obs.requests[msg["message-id"]] = msg["request-type"]
 
