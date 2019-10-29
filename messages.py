@@ -33,7 +33,11 @@ class Request:
         elif mtype == "transitionToPreviousScene":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = "SetCurrentScene"
-            msg["scene-name"] = self.obs.previousScene.name
+            try:
+                msg["scene-name"] = self.obs.previousScene.name
+            except AttributeError:
+                print("No previous scene to transition to.")
+                return
             msgs.append(msg)
 
         elif mtype == "hideAllSources":
