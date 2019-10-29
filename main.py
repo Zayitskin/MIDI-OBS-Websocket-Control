@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.7
+
 import websockets, asyncio, json, sys, mido, argparse
 from multiprocessing import Process, SimpleQueue
 
@@ -80,7 +82,7 @@ class MIDIWebsocketHandler(WebsocketHandler):
     def parse(self, msg):
         
         key = msg.type
-        if key == "note_on" or key == "note_off":
+        if key == "note_on":
             value = msg.note
         elif key == "program_change":
             value = msg.channel
