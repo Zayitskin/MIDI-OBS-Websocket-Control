@@ -86,7 +86,7 @@ class MIDIWebsocketHandler(WebsocketHandler):
         if key == "note_on" or key == "note_off":
             value = msg.note
         elif key == "program_change":
-            value = msg.channel
+            value = msg.control
         value = int(value)
         try:
             for command in self.config[key][value]:
