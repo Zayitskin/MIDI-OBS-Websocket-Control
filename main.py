@@ -1,5 +1,3 @@
-#!/usr/bin/env python3.7
-
 import websockets, asyncio, json, sys, mido, argparse
 from multiprocessing import Process, SimpleQueue
 
@@ -82,15 +80,16 @@ class MIDIWebsocketHandler(WebsocketHandler):
     def parse(self, msg):
         
         key = msg.type
-        if key == "note_on":
+        if key == "note_on" or key == "note_off":
             value = msg.note
-        elif key == "note_off":
-            return
         elif key == "program_change":
             value = msg.channel
         value = int(value)
-        for command in self.config[key][value]:
-            self.requests.append(Request(self.id, command, self.obs))
+        try:
+            for command in self.config[key][value]:
+                self.requests.append(Request(self.id, command, self.obs))
+        except KeyError:
+            return
 
     async def run(self):
 
@@ -132,8 +131,11 @@ class GUIWebsocketHandler(WebsocketHandler):
         
         key, value = msg.split(" ")
         value = int(value)
-        for command in self.config[key][value]:
-            self.requests.append(Request(self.id, command, self.obs))
+        try:
+            for command in self.config[key][value]:
+                self.requests.append(Request(self.id, command, self.obs))
+        except KeyError:
+            return
 
     async def run(self):
         
