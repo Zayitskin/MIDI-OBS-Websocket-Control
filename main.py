@@ -59,7 +59,7 @@ class WebsocketHandler:
 
     async def send(self, websocket, request):
         
-        if msg == None:
+        if request == None:
             return
         for msg in request:
             await websocket.send(json.dumps(msg))
