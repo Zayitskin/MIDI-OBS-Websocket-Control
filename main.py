@@ -1,7 +1,11 @@
 import websockets, asyncio, json, sys, mido, argparse
 from multiprocessing import Process, SimpleQueue
 
-from gui import toolLoop
+try:
+    from gui import toolLoop
+except ImportError:
+    print("GUI mode unavailable.")
+
 from messages import Request, Response
 from structures import OBS, Scene, SceneItem
 
