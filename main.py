@@ -85,7 +85,8 @@ class MIDIWebsocketHandler(WebsocketHandler):
 
     def parse(self, msg):
 
-        print(msg)
+        if self.debug == True:
+            print(msg)
         key = msg.type
         if key == "note_on" or key == "note_off":
             value = msg.note
