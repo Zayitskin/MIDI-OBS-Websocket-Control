@@ -29,6 +29,10 @@ class WebsocketHandler:
 
         self.requests.append(Request(self.id, {"type": "GetSceneList"}, self.obs))
 
+    def setDebugMode(self, boolean):
+
+        self.debug = boolean
+
     def getConfig(self, path):
         #Aquires a config file for MIDI message parsing
         #A valid config is an array of objects with three parameters:
@@ -174,8 +178,10 @@ class GUIWebsocketHandler(WebsocketHandler):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", type = str, choices = ["midi", "gui", "scan"])
-    parser.add_argument("-config", type = str, default = "settings.json")
-    parser.add_argument("-port", type = str)
+    parser.add_argument("--config", type = str, default = "settings.json")
+    parser.add_argument("--port", type = str)
+    parser.add_argument("--debug", type = bool, default = False)
+    
     args = parser.parse_args()
 
     if args.mode == "midi":
@@ -185,4 +191,5 @@ if __name__ == "__main__":
     elif args.mode == "scan":
         print(mido.get_input_names())
         sys.exit()
+    websocketHandler.setDebugMode(args.debug)
     asyncio.get_event_loop().run_until_complete(websocketHandler.run())
