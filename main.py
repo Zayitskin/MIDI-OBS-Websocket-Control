@@ -1,6 +1,5 @@
 import websockets, asyncio, json, sys, mido, argparse
 from multiprocessing import Process, SimpleQueue
-from collections import defaultdict as ddict
 
 try:
     from gui import toolLoop
@@ -91,7 +90,6 @@ class MIDIWebsocketHandler(WebsocketHandler):
     def __init__(self, config, port):
         
         super().__init__(config)
-        self.midiState = ddict(False)
 
         if port == None:
             self.port = mido.get_input_names()[0]
