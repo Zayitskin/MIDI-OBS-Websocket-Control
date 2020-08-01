@@ -1,5 +1,6 @@
 import websockets, asyncio, json, sys, mido, argparse
 from multiprocessing import Process, SimpleQueue
+from collections import defaultdict as ddict
 
 try:
     from gui import toolLoop
@@ -44,11 +45,27 @@ class WebsocketHandler:
             data = json.load(f)
             config = {}
             for obj in data:
-                if obj["key"] not in config.keys():
-                    config[obj["key"]] = {obj["value"]: []}
-                elif obj["value"] not in config[obj["key"]].keys():
-                    config[obj["key"]][obj["value"]] = []
-                config[obj["key"]][obj["value"]].extend(obj["commands"])
+                if obj["key"] == "locked-toggle":
+                    data.append({"key": "note_on",
+                                 "value": obj["value"],
+                                 "commands": [{
+                                     "type": "showSource",
+                                     "target": obj["target"]
+                                     }]
+                                 })
+                    data.append({"key": "note_off",
+                                 "value": obj["value"],
+                                 "commands": [{
+                                     "type": "hideSource",
+                                     "target": obj["target"]
+                                     }]
+                                 })
+                else:
+                    if obj["key"] not in config.keys():
+                        config[obj["key"]] = {obj["value"]: []}
+                    elif obj["value"] not in config[obj["key"]].keys():
+                        config[obj["key"]][obj["value"]] = []
+                    config[obj["key"]][obj["value"]].extend(obj["commands"])
             return config
 
     async def read(self, websocket):
@@ -74,6 +91,7 @@ class MIDIWebsocketHandler(WebsocketHandler):
     def __init__(self, config, port):
         
         super().__init__(config)
+        self.midiState = ddict(False)
 
         if port == None:
             self.port = mido.get_input_names()[0]
