@@ -59,6 +59,19 @@ class WebsocketHandler:
                                      "target": obj["target"]
                                      }]
                                  })
+                elif obj["key"] == "unlocked-toggle":
+                    data.append({"key": "note_on",
+                                 "value": obj["value"],
+                                 "commands": [{
+                                     "type": "transitionToPreviousScene",
+                                     }]
+                                 })
+                    data.append({"key": "note_off",
+                                 "value": obj["value"],
+                                 "commands": [{
+                                     "type": "transitionToPreviousScene",
+                                     }]
+                                 })
                 else:
                     if obj["key"] not in config.keys():
                         config[obj["key"]] = {obj["value"]: []}
