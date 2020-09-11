@@ -1,0 +1,43 @@
+This is an example file for understanding the configuation format for the MIDI OBS controller
+THIS IS NOT VALID JSON! If you use this, the program WILL crash.
+
+The settings file is comprised of an array of commands:
+[
+	Each command is an object with a:
+		command - name of the OBS control command to be run
+		          commands with (parenthesis) are paired together
+			showSource - makes target source visible (hideSource)
+			hideSource - makes target source invisible (showSource)
+			toggleSource - inverts the target's visibility
+			showAllSources - makes all sources visible (hideAllSources)
+			hideAllSources - makes all sources invisible (showAllSources)
+			transitionToScene - transitions to target scene
+			transitionToPreviousScene - transitions to the last active scene
+			                            only knows changes while program is active
+		type - defines the trigger functionality of the command:
+			open - triggers only on note_on
+			closed - triggers only on note_off
+			latch - triggers on both note_on and note_off
+			mirror - triggers on note_on, and the paired command on note_off
+			         if a command does not have a pair, acts like latch
+		value - the value of the MIDI note that should trigger the command
+		target - target of the command (if command has no target, field can be omitted)
+	{
+		"command": "showSource",
+		"value": 1,
+		"type": "open",
+		"target": ""
+	},
+	{
+		"command": "hideSource",
+		"value": 1,
+		"type": "closed",
+		"target": ""
+	},
+	{
+		"command": "toggleSource",
+		"value": 2,
+		"type": "latch",
+		"target": ""
+	}
+]
