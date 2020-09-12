@@ -16,7 +16,7 @@ The settings file is comprised of an array of commands:
 			                            only knows changes while program is active
 		type - defines the trigger functionality of the command:
 			open - triggers only on note_on
-			closed - triggers only on note_off
+			close - triggers only on note_off
 			latch - triggers on both note_on and note_off
 			mirror - triggers on note_on, and the paired command on note_off
 			         if a command does not have a pair, acts like latch
@@ -31,7 +31,7 @@ The settings file is comprised of an array of commands:
 	{
 		"command": "hideSource",
 		"value": 1,
-		"type": "closed",
+		"type": "close",
 		"target": ""
 	},
 	{
