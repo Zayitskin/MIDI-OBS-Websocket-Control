@@ -9,6 +9,13 @@ except ImportError:
 from messages import Request, Response
 from structures import OBS, Scene, SceneItem
 
+pairedCommands = {
+    "showSource": "hideSource",
+    "hideSource": "showSource",
+    "showAllSources": "hideAllSources",
+    "hideAllSources": "showAllSources"
+    }
+
 def Id():
     #Unique id generator
     
@@ -16,94 +23,82 @@ def Id():
     while True:
         yield str(i)
         i += 1
-
+        
 class WebsocketHandler:
-
+    
     def __init__(self, config):
         
-        self.id = Id()
+        self._id = Id()
         self.config = self.getConfig(config)
-
+        
         self.obs = OBS()
         self.requests, self.responses = [], []
-
-        self.requests.append(Request(self.id, {"type": "GetSceneList"}, self.obs))
-
+        self.requests.append(Request(self._id, {"type": "GetSceneList"}, self.obs))
+        
     def setDebugMode(self, boolean):
 
         self.debug = boolean
-
+        print(self.config)
+        
     def getConfig(self, path):
-        #Aquires a config file for MIDI message parsing
-        #A valid config is an array of objects with three parameters:
-        #   key: the type of midi message
-        #   value: the value associated with the message
-        #   commands: an array of the commands to be run
         
         with open(path, "r") as f:
             data = json.load(f)
             config = {}
             for obj in data:
-                if obj["key"] == "locked-toggle":
-                    data.append({"key": "note_on",
-                                 "value": obj["value"],
-                                 "commands": [{
-                                     "type": "showSource",
-                                     "target": obj["target"]
-                                     }]
-                                 })
-                    data.append({"key": "note_off",
-                                 "value": obj["value"],
-                                 "commands": [{
-                                     "type": "hideSource",
-                                     "target": obj["target"]
-                                     }]
-                                 })
-                elif obj["key"] == "unlocked-toggle":
-                    data.append({"key": "note_on",
-                                 "value": obj["value"],
-                                 "commands": [{
-                                     "type": "transitionToPreviousScene",
-                                     }]
-                                 })
-                    data.append({"key": "note_off",
-                                 "value": obj["value"],
-                                 "commands": [{
-                                     "type": "transitionToPreviousScene",
-                                     }]
-                                 })
+                command, value, _type = obj["command"], obj["value"], obj["type"]
+                if "target" in obj:
+                    target = obj["target"]
                 else:
-                    if obj["key"] not in config.keys():
-                        config[obj["key"]] = {obj["value"]: []}
-                    elif obj["value"] not in config[obj["key"]].keys():
-                        config[obj["key"]][obj["value"]] = []
-                    config[obj["key"]][obj["value"]].extend(obj["commands"])
-            return config
-
+                    target = None
+                if value not in config.keys():
+                    config[value] = {"note_on": [], "note_off": []}
+                
+                if _type == "open":
+                    config[value]["note_on"].append({"type": command, "target": target})
+                elif _type == "close":
+                    config[value]["note_off"].append({"type": command, "target": target})
+                elif _type == "latch":
+                    config[value]["note_on"].append({"type": command, "target": target})
+                    config[value]["note_off"].append({"type": command, "target": target})
+                elif _type == "mirror":
+                    if command not in pairedCommands:
+                        config[value]["note_on"].append({"type": command, "target": target})
+                        config[value]["note_off"].append({"type": command, "target": target})
+                    else:
+                        config[value]["note_on"].append({"type": command, "target": target})
+                        config[value]["note_off"].append({"type": pairedCommands[command], "target": target})
+                        
+        return config
+    
     async def read(self, websocket):
+        
         try:
             while True:
                 msg = await websocket.recv()
                 data = json.loads(msg)
+                if self.debug:
+                    print(data)
                 self.responses.append(Response(data, self.obs))
-                    
         except asyncio.CancelledError:
             return
-
+        
     async def send(self, websocket, request):
         
+        if self.debug:
+            print(request)
         if request == None:
             return
         for msg in request:
             await websocket.send(json.dumps(msg))
             self.obs.requests[msg["message-id"]] = msg["request-type"]
-
+            
 class MIDIWebsocketHandler(WebsocketHandler):
-
+    
     def __init__(self, config, port):
         
         super().__init__(config)
-
+        
         if port == None:
             self.port = mido.get_input_names()[0]
         else:
@@ -111,29 +106,25 @@ class MIDIWebsocketHandler(WebsocketHandler):
                 if option.startswith(port):
                     self.port = option
                     break
-
+        
     def parse(self, msg):
-
+        
         if self.debug == True:
             print(msg)
         key = msg.type
         if key == "note_on" or key == "note_off":
             value = msg.note
-        elif key == "program_change":
-            value = msg.program
-        elif key == "control_change":
-            value = msg.control
         else:
             return
         value = int(value)
         try:
-            for command in self.config[key][value]:
-                self.requests.append(Request(self.id, command, self.obs))
+            for command in self.config[value][key]:
+                self.requests.append(Request(self._id, command, self.obs))
         except KeyError:
-            return
-
+            return        
+    
     async def run(self):
-
+        
         with mido.open_input(self.port) as port:
             async with websockets.connect("ws://localhost:4444") as websocket:
 
@@ -152,8 +143,8 @@ class MIDIWebsocketHandler(WebsocketHandler):
                         response.handle()
                         self.responses.remove(response)
 
-                await readTask
-
+                await readTask        
+    
 class GUIWebsocketHandler(WebsocketHandler):
 
     def __init__(self, config):
@@ -170,11 +161,13 @@ class GUIWebsocketHandler(WebsocketHandler):
 
     def parse(self, msg):
         
+        if self.debug:
+            print(msg)
         key, value = msg.split(" ")
         value = int(value)
         try:
-            for command in self.config[key][value]:
-                self.requests.append(Request(self.id, command, self.obs))
+            for command in self.config[value][key]:
+                self.requests.append(Request(self._id, command, self.obs))
         except KeyError:
             return
 
@@ -204,16 +197,16 @@ class GUIWebsocketHandler(WebsocketHandler):
                     self.responses.remove(response)
 
             await readTask
-
+            
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", type = str, choices = ["midi", "gui", "scan"])
     parser.add_argument("--config", type = str, default = "settings.json")
     parser.add_argument("--port", type = str)
     parser.add_argument("--debug", type = bool, default = False)
-    
+                    
     args = parser.parse_args()
-
+                
     if args.mode == "midi":
         websocketHandler = MIDIWebsocketHandler(args.config, args.port)
     elif args.mode == "gui":

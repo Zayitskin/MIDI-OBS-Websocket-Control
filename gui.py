@@ -7,10 +7,13 @@ class Tool:
         pygame.init()
         self.screen = pygame.display.set_mode((800, 800))
         self.queue = queue
-
-        self.buttons = buildButtonArray(
-            ["note_on " + str(i) for i in range(1, 8)],
-            None, 0, 400, 0, 400)
+        
+        buttons = []
+        for i in range(1, 29):
+            buttons.append("note_on " + str(i))
+            buttons.append("note_off " + str(i))
+            
+        self.buttons = buildButtonArray(buttons, None, 0, 800, 0, 800)
 
     def eventHandler(self):
         for event in pygame.event.get():
