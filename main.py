@@ -1,4 +1,4 @@
-import websockets, asyncio, json, sys, mido, argparse
+import websockets, asyncio, json, yaml, sys, mido, argparse
 from multiprocessing import Process, SimpleQueue
 
 try:
@@ -43,7 +43,7 @@ class WebsocketHandler:
     def getConfig(self, path):
         
         with open(path, "r") as f:
-            data = json.load(f)
+            data = yaml.safe_load(f)
             config = {}
             for obj in data:
                 command, value, _type = obj["command"], obj["value"], obj["type"]
@@ -201,7 +201,7 @@ class GUIWebsocketHandler(WebsocketHandler):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", type = str, choices = ["midi", "gui", "scan"])
-    parser.add_argument("--config", type = str, default = "settings.json")
+    parser.add_argument("--config", type = str, default = "settings.yaml")
     parser.add_argument("--port", type = str)
     parser.add_argument("--debug", type = bool, default = False)
                     
