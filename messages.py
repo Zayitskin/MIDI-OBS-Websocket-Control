@@ -1,31 +1,44 @@
+from typing import Union
+from collections.abc import Generator
 
+from structures import OBS, Scene
 
 class Request:
+    """Structure that represents a request to be sent to OBS."""
 
-    def __init__(self, id, data, obs):
+    def __init__(self, _id: Generator[str, None, None], data: dict, obs: OBS) -> None:
+        """
+        Initializes a request to be sent to OBS.
+
+        id: generator for producing unique integers for each request
+        data: dict containing the type of request and all necessary information
+        obs: the OBS container for ensuring parity between script and OBS
+        """
         
-        self.id = id
+        self.id = _id
         self.data = data
         self.obs = obs
 
-    def format(self):
-        #Returns a series of messages formatted to be sent to OBS
-        #via the websocket. All custom requests begin with a
-        #lower-case letter, while the websocket library requests
-        #begin with an upper-case letter.
+    def format(self) -> Union[list[dict], None]:
+        """
+        Returns a series of messages formatted to be sent to OBS
+        via the websocket. All custom requests begin with a
+        lower-case letter, while the websocket library requests
+        begin with an upper-case letter.
+        """
         
         msgs = []
         mtype = self.data["type"]
 
         #Custom Requests
-        #Common requests to be used in the settings.json file
+        #Common requests to be used in the settings file
         
         #SceneCollection
 
         #Scene
 
         if mtype == "transitionToScene":
-            msg = {"message-id": next(self.id)}
+            msg: dict = {"message-id": next(self.id)}
             msg["request-type"] = "SetCurrentScene"
             msg["scene-name"] = self.data["target"]
             msgs.append(msg)
@@ -33,28 +46,36 @@ class Request:
         elif mtype == "transitionToPreviousScene":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = "SetCurrentScene"
-            try:
+            if self.obs.previousScene != None:
+                #Assertion to make mypy happy
+                assert isinstance(self.obs.previousScene, Scene)
                 msg["scene-name"] = self.obs.previousScene.name
-            except AttributeError:
+            else:
                 print("No previous scene to transition to.")
-                return
+                return None
             msgs.append(msg)
 
         elif mtype == "hideAllSources":
-            for target in self.obs.currentScene.getAllSceneItems():
-                msg = {"message-id": next(self.id)}
-                msg["request-type"] = "SetSceneItemProperties"
-                msg["item"] = target.name
-                msg["visible"] = False
-                msgs.append(msg)
+            if self.obs.currentScene != None:
+                #Assertion to make mypy happy
+                assert isinstance(self.obs.currentScene, Scene)
+                for target in self.obs.currentScene.getAllSceneItems():
+                    msg = {"message-id": next(self.id)}
+                    msg["request-type"] = "SetSceneItemProperties"
+                    msg["item"] = target.name
+                    msg["visible"] = False
+                    msgs.append(msg)
 
         elif mtype == "showAllSources":
-            for target in self.obs.currentScene.getAllSceneItems():
-                msg = {"message-id": next(self.id)}
-                msg["request-type"] = "SetSceneItemProperties"
-                msg["item"] = target.name
-                msg["visible"] = True
-                msgs.append(msg)
+            if self.obs.currentScene != None:
+                #Assertion to make mypy happy
+                assert isinstance(self.obs.currentScene, Scene)
+                for target in self.obs.currentScene.getAllSceneItems():
+                    msg = {"message-id": next(self.id)}
+                    msg["request-type"] = "SetSceneItemProperties"
+                    msg["item"] = target.name
+                    msg["visible"] = True
+                    msgs.append(msg)
 
         #Source
 
@@ -73,11 +94,14 @@ class Request:
             msgs.append(msg)
 
         elif mtype == "toggleSource":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = "SetSceneItemProperties"
-            msg["item"] = self.data["target"]
-            msg["visible"] = not self.obs.currentScene.sceneItems[self.data["target"]].isVisible()
-            msgs.append(msg)
+            if self.obs.currentScene != None:
+                #Assertion to make mypy happy
+                assert isinstance(self.obs.currentScene, Scene)
+                msg = {"message-id": next(self.id)}
+                msg["request-type"] = "SetSceneItemProperties"
+                msg["item"] = self.data["target"]
+                msg["visible"] = not self.obs.currentScene.sceneItems[self.data["target"]].isVisible()
+                msgs.append(msg)
 
         #Filter
 
@@ -85,7 +109,7 @@ class Request:
 
         #OBS Websocket Requests
         #Full request list for the OBS Websocket library
-        #DO NOT INVOKE IN THE SETTINGS.JSON UNLESS YOU KNOW WHAT YOU ARE DOING!
+        #DO NOT INVOKE IN THE SETTINGS UNLESS YOU KNOW WHAT YOU ARE DOING!
         #Requests with commented out msgs.append are not yet implemented
 
         #General
@@ -546,18 +570,26 @@ class Request:
 
         else:
             print("Malformed request data: " + str(self.data))
-            return
+            return None
 
         return msgs
 
 class Response:
+    """Structure that handles repsonses from OBS"""
 
-    def __init__(self, data, obs):
+    def __init__(self, data: dict, obs: OBS) -> None:
+        """
+        Initializes a response to handle a message from OBS.
+
+        data: dict of the information received from OBS
+        obs: the OBS container for ensuring parity between script and OBS
+        """
         
         self.data = data
         self.obs = obs
 
-    def handle(self):
+    def handle(self) -> None:
+        """Updates the state of the OBS container according to the response."""
 
         if self.data.get("message-id") != None:
             if self.data["status"] == "error":
