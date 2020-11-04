@@ -1,7 +1,7 @@
-from typing import Union
+from typing import Union, Optional
 
 class OBS:
-    """Container that hold information regarding the current state of OBS."""
+    """Container that holds information regarding the current state of OBS."""
 
     def __init__(self) -> None:
         """Initializes an OBS container."""
@@ -11,6 +11,7 @@ class OBS:
         self.previousScene: Union[Scene, None] = None
 
         self.requests: dict = {}
+        self.updates: list = []
 
     def clearScenes(self) -> None:
         """Removes all scenes and resets current and previous scene to None."""
@@ -32,6 +33,7 @@ class OBS:
         self.scenes[name] = Scene(name)
         for sceneItem in scene["sources"]:
             self.scenes[name].addSceneItem(sceneItem)
+            self.updates.append({"type": "GetSourceFilters", "target": sceneItem["name"]})
         
 
     def setCurrentScene(self, scene: str) -> None:
@@ -43,8 +45,17 @@ class OBS:
             self.previousScene = self.currentScene
             self.currentScene = self.scenes[scene]
 
+    def getSceneItem(self, name: str) -> Optional["SceneItem"]:
+        """Returns the SceneItem with the requested name."""
+
+        for scene in self.scenes:
+            for sceneItem in self.scenes[scene].sceneItems:
+                if sceneItem == name:
+                    return self.scenes[scene].sceneItems[sceneItem]
+        return None
+
 class SceneCollection:
-    """Container that hold information regarding a Scene Collection."""
+    """Container that holds information regarding a Scene Collection."""
 
     def __init__(self, name: str) -> None:
         """
@@ -56,7 +67,7 @@ class SceneCollection:
         self.name = name  
 
 class Scene:
-    """Container that hold information regarding a Scene."""
+    """Container that holds information regarding a Scene."""
 
     def __init__(self, name: str) -> None:
         """
@@ -94,8 +105,32 @@ class SceneItem:
 
         self.name = data["name"]
         self.data = data
+        self.filters: list = []
 
     def isVisible(self) -> bool:
         """Returns if the SceneItem is visible in OBS."""
 
         return self.data["render"]
+
+    def addFilter(self, _filter: dict) -> None:
+        """Adds a filter to the list of filters."""
+
+        self.filters.append(Filter(_filter))
+
+    def getFilter(self, filterName: str) -> Optional["Filter"]:
+        """Returns the filter with name filterName."""
+
+        for _filter in self.filters:
+            if _filter.name == filterName:
+                return _filter
+        return None
+
+class Filter:
+    """Container that holds information regarding a Filter."""
+
+    def __init__(self, data:dict) -> None:
+
+        self.name = data["name"]
+        self.settings = data["settings"]
+        self.type = data["type"]
+        self.enabled = data["enabled"]

@@ -3,6 +3,7 @@
 #Each command is an object with a:
 #command - name of the OBS control command to be run
 #          commands with (parenthesis) are paired together
+#   ---Scene and Source Commands---
 #	showSource - makes target source visible (hideSource)
 #	hideSource - makes target source invisible (showSource)
 #	toggleSource - inverts the target's visibility
@@ -11,14 +12,26 @@
 #	transitionToScene - transitions to target scene
 #	transitionToPreviousScene - transitions to the last active scene
 #	                            only knows changes while program is active
+#   ---Filter Commands--- NOTE: Filters work differently, see value and target sections below
+#   showFilter - makes target filter on target source visible (hideFilter)
+#   hideFilter - makes target filter on target source invisible (showFilter)
+#   toggleFilter - inverts target filter on target source's visibility
+#   editFilter - edits the settings of a filter, takes special argument "settings" (see below)
 #type - defines the trigger functionality of the command:
 #	open - triggers only on note_on
 #	close - triggers only on note_off
 #	latch - triggers on both note_on and note_off
 #	mirror - triggers on note_on, and the paired command on note_off
 #	         if a command does not have a pair, acts like latch
-#value - the value of the MIDI note that should trigger the command
+#   reflect - ONLY FOR editFilter! Passes the control value as data for the edit
+#value - for scene and source commands: the value of the MIDI note that should trigger the command
+#        for filter commands: the control code that triggers or modifies the command
 #target - target of the command (if command has no target, field can be omitted)
+#   If command is a filter command, instead:
+#   targetSource - the source that contains the target filter for the command
+#   targetFilter - the target of the command
+#---Special Arguments---
+#setting - for editFilter, the setting of target filter for the control value to be applied to
 - command: showSource
   target: Image
   type: open
@@ -39,3 +52,20 @@
   target: ~
   type: open
   value: 5
+- command: showFilter
+  targetSource: Image
+  targetFilter: Color Correction
+  value: 1
+- command: hideFilter
+  targetSource: Image
+  targetFilter: Color Correction
+  value: 2
+- command: toggleFilter
+  targetSource: Image
+  targetFilter: Color Correction
+  value: 4
+- command: editFilter
+  targetSource: Image
+  targetFilter: Color Correction
+  value: 5
+  setting: hue_shift
