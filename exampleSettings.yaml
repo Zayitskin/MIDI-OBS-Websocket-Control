@@ -23,7 +23,6 @@
 #	latch - triggers on both note_on and note_off
 #	mirror - triggers on note_on, and the paired command on note_off
 #	         if a command does not have a pair, acts like latch
-#   reflect - ONLY FOR editFilter! Passes the control value as data for the edit
 #value - for scene and source commands: the value of the MIDI note that should trigger the command
 #        for filter commands: the control code that triggers or modifies the command
 #target - target of the command (if command has no target, field can be omitted)
