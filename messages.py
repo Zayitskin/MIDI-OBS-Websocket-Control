@@ -1,7 +1,7 @@
-from typing import Union
+from typing import Union, Optional
 from collections.abc import Generator
 
-from structures import OBS, Scene
+from structures import OBS, Scene, SceneItem, Filter
 
 class Request:
     """Structure that represents a request to be sent to OBS."""
@@ -19,7 +19,7 @@ class Request:
         self.data = data
         self.obs = obs
 
-    def format(self) -> Union[list[dict], None]:
+    def format(self) -> Optional[list[dict]]:
         """
         Returns a series of messages formatted to be sent to OBS
         via the websocket. All custom requests begin with a
@@ -102,6 +102,48 @@ class Request:
                 msg["item"] = self.data["target"]
                 msg["visible"] = not self.obs.currentScene.sceneItems[self.data["target"]].isVisible()
                 msgs.append(msg)
+
+        elif mtype == "showFilter":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = "SetSourceFilterVisibility"
+            msg["sourceName"] = self.data["targetSource"]
+            msg["filterName"] = self.data["targetFilter"]
+            msg["filterEnabled"] = True
+            msgs.append(msg)
+
+        elif mtype == "hideFilter":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = "SetSourceFilterVisibility"
+            msg["sourceName"] = self.data["targetSource"]
+            msg["filterName"] = self.data["targetFilter"]
+            msg["filterEnabled"] = False
+            msgs.append(msg)
+
+        elif mtype == "toggleFilter":
+            sceneItem = self.obs.getSceneItem(self.data["targetSource"])
+            if sceneItem != None:
+                #Assertions to make mypy happy
+                assert isinstance(sceneItem, SceneItem)
+                _filter = sceneItem.getFilter(self.data["targetFilter"])
+                if _filter != None:
+                    assert isinstance(_filter, Filter)
+                    msg = {"message-id": next(self.id)}
+                    msg["request-type"] = "SetSourceFilterVisibility"
+                    msg["sourceName"] = self.data["targetSource"]
+                    msg["filterName"] = self.data["targetFilter"]
+                    msg["filterEnabled"] = not _filter.enabled
+                    msgs.append(msg)
+
+        elif mtype == "editFilter":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = "SetSourceFilterSettings"
+            msg["sourceName"] = self.data["targetSource"]
+            msg["filterName"] = self.data["targetFilter"]
+            value = self.data["value"]
+            if self.data["setting"] == "hue_shift":
+                value = (((value - 0) * (180 - -180)) / (127 - 0)) + -180
+            msg["filterSettings"] = {self.data["setting"]: value}
+            msgs.append(msg)
 
         #Filter
 
@@ -269,7 +311,7 @@ class Request:
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        #Scene Items
+        #Scene Items  
         elif mtype == "GetSceneItemProperties":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
@@ -432,6 +474,12 @@ class Request:
         elif mtype == "GetSourceFilters":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
+            msg["sourceName"] = self.data["target"]
+            msgs.append(msg)
+
+        elif mtype == "GetSourceFilterInfo":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
             #msgs.append(msg)
 
         elif mtype == "AddFilterToSource":
@@ -457,7 +505,18 @@ class Request:
         elif mtype == "SetSourceFilterSettings":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
-            #msgs.append(msg)
+            msg["sourceName"] = self.data["sourceName"]
+            msg["filterName"] = self.data["filterName"]
+            msg["filterSettings"] = self.data["filterSettings"]
+            msgs.append(msg)
+
+        elif mtype == "SetSourceFilterVisibility":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            msg["sourceName"] = self.data["sourceName"]
+            msg["filterName"] = self.data["filterName"]
+            msg["filterEnabled"] = self.data["filterEnabled"]
+            msgs.append(msg)
 
         elif mtype == "TakeSourceScreenshot":
             msg = {"message-id": next(self.id)}
@@ -596,7 +655,8 @@ class Response:
                 print(self.data["error"])
                 return
             else:
-                request = self.obs.requests.pop(self.data["message-id"])
+                requestData = self.obs.requests.pop(self.data["message-id"])
+                request = requestData["request-type"]
                 #Responses
                 #General
                 if request == "GetVersion":
@@ -793,7 +853,12 @@ class Response:
                     pass
 
                 elif request == "GetSourceFilters":
-                    pass
+                    source = self.obs.getSceneItem(requestData["sourceName"])
+                    if source != None:
+                        #Assertion to make mypy happy
+                        assert isinstance(source, SceneItem)
+                        for _filter in self.data["filters"]:
+                            source.addFilter(_filter)
 
                 elif request == "AddFilterToSource":
                     pass
@@ -808,6 +873,9 @@ class Response:
                     pass
 
                 elif request == "SetSourceFilterSettings":
+                    pass
+
+                elif request == "SetSourceFilterVisibility":
                     pass
 
                 elif request == "TakeSourceScreenshot":
@@ -1000,6 +1068,16 @@ class Response:
 
             elif self.data["update-type"] == "SourceFilterRemoved":
                 pass
+
+            elif self.data["update-type"] == "SourceFilterVisibilityChanged":
+                source = self.obs.getSceneItem(self.data["sourceName"])
+                if source != None:
+                    #Assertions to make mypy happy
+                    assert isinstance(source, SceneItem)
+                    _filter = source.getFilter(self.data["filterName"])
+                    if _filter != None:
+                        assert isinstance(_filter, Filter)
+                        _filter.enabled = self.data["filterEnabled"]
 
             elif self.data["update-type"] == "SourceFiltersReordered":
                 pass

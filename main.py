@@ -1,7 +1,7 @@
 import websockets, asyncio, json, yaml, sys, mido, argparse #type: ignore
 from collections.abc import Generator
 from multiprocessing import Process, SimpleQueue
-from typing import Union, NoReturn
+from typing import Union, NoReturn, Optional
 
 try:
     from gui import toolLoop
@@ -11,17 +11,19 @@ except ImportError:
 from messages import Request, Response
 from structures import OBS, Scene, SceneItem
 
-pairedCommands = {
+pairedCommands: dict[str, str] = {
     "showSource": "hideSource",
     "hideSource": "showSource",
     "showAllSources": "hideAllSources",
-    "hideAllSources": "showAllSources"
+    "hideAllSources": "showAllSources",
+    "showFilter": "hideFilter",
+    "hideFilter": "showFilter",
     }
 
 def Id() -> Generator[str, None, None]:
     """Unique id generator"""
     
-    i = 0
+    i: int = 0
     while True:
         yield str(i)
         i += 1
@@ -45,7 +47,6 @@ class WebsocketHandler:
         """Enables or disables debug mode."""
 
         self.debug = boolean
-        print(self.config)
         
     def getConfig(self, path: str) -> dict:
         """Sets the config to the data in file at path."""
@@ -59,28 +60,53 @@ class WebsocketHandler:
                 raise NotImplementedError("Not a valid configuration format.")
             config: dict = {}
             for obj in data:
-                command, value, _type = obj["command"], obj["value"], obj["type"]
+                command, value = obj["command"], obj["value"]
+                if "type" in obj:
+                    _type = obj["type"]
+                else:
+                    _type = None
                 if "target" in obj:
                     target = obj["target"]
                 else:
                     target = None
+                if "targetSource" in obj:
+                    targetSource = obj["targetSource"]
+                else:
+                    targetSource = None
+                if "targetFilter" in obj:
+                    targetFilter = obj["targetFilter"]
+                else:
+                    targetFilter = None
+                if "setting" in obj:
+                    setting = obj["setting"]
+                else:
+                    setting = None
+
                 if value not in config.keys():
-                    config[value] = {"note_on": [], "note_off": []}
-                
-                if _type == "open":
-                    config[value]["note_on"].append({"type": command, "target": target})
-                elif _type == "close":
-                    config[value]["note_off"].append({"type": command, "target": target})
-                elif _type == "latch":
-                    config[value]["note_on"].append({"type": command, "target": target})
-                    config[value]["note_off"].append({"type": command, "target": target})
-                elif _type == "mirror":
-                    if command not in pairedCommands:
+                        config[value] = {"note_on": [], "note_off": [], "control_change": []}
+                        
+                if "Filter" not in command:
+                    if _type == "open":
+                        config[value]["note_on"].append({"type": command, "target": target})
+                    elif _type == "close":
+                        config[value]["note_off"].append({"type": command, "target": target})
+                    elif _type == "latch":
                         config[value]["note_on"].append({"type": command, "target": target})
                         config[value]["note_off"].append({"type": command, "target": target})
+                    elif _type == "mirror":
+                        if command not in pairedCommands:
+                            config[value]["note_on"].append({"type": command, "target": target})
+                            config[value]["note_off"].append({"type": command, "target": target})
+                        else:
+                            config[value]["note_on"].append({"type": command, "target": target})
+                            config[value]["note_off"].append({"type": pairedCommands[command], "target": target})
+                else:
+                    if setting == None:
+                        config[value]["control_change"].append(
+                            {"type": command, "targetSource": targetSource, "targetFilter": targetFilter})
                     else:
-                        config[value]["note_on"].append({"type": command, "target": target})
-                        config[value]["note_off"].append({"type": pairedCommands[command], "target": target})
+                        config[value]["control_change"].append(
+                            {"type": command, "targetSource": targetSource, "targetFilter": targetFilter, "setting": setting})
                         
         return config
     
@@ -109,7 +135,7 @@ class WebsocketHandler:
         assert isinstance(request, list)
         for msg in request:
             await websocket.send(json.dumps(msg))
-            self.obs.requests[msg["message-id"]] = msg["request-type"]
+            self.obs.requests[msg["message-id"]] = msg
             
 class MIDIWebsocketHandler(WebsocketHandler):
     """Wrapper for interacting with the OBS websocket through a MIDI device."""
@@ -134,12 +160,18 @@ class MIDIWebsocketHandler(WebsocketHandler):
             print(msg)
         key = msg.type
         if key == "note_on" or key == "note_off":
-            value = msg.note
+            _id = msg.note
+            value: Optional[int] = None
+        elif key == "control_change":
+            _id = msg.control
+            value = msg.value
         else:
             return
-        value = int(value)
+        _id = int(_id)
         try:
-            for command in self.config[value][key]:
+            for command in self.config[_id][key]:
+                if command["type"] == "editFilter":
+                    command["value"] = value
                 self.requests.append(Request(self._id, command, self.obs))
         except KeyError:
             return        
@@ -156,6 +188,10 @@ class MIDIWebsocketHandler(WebsocketHandler):
                     await asyncio.sleep(0.1)
                     for msg in port.iter_pending():
                         self.parse(msg)
+
+                    for update in self.obs.updates:
+                        self.requests.append(Request(self._id, update, self.obs))
+                        self.obs.updates.remove(update)
 
                     for request in self.requests:
                         await self.send(websocket, request.format())
