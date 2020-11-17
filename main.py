@@ -5,8 +5,6 @@ from collections import defaultdict as ddict
 from collections.abc import Generator
 from typing import Optional, NoReturn
 
-from pprint import pprint
-
 from messages import Request, Response
 from structures import OBS, Scene, Source
 
