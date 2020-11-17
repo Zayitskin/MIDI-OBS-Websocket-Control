@@ -1,106 +1,79 @@
-from typing import Union, Optional
+#from typing import Optional
 from collections.abc import Generator
 
-from structures import OBS, Scene, SceneItem, Filter
+from structures import OBS, Scene, Source, Filter
 
 class Request:
     """Structure that represents a request to be sent to OBS."""
 
     def __init__(self, _id: Generator[str, None, None], data: dict, obs: OBS) -> None:
-        """
-        Initializes a request to be sent to OBS.
+        """Initializes a request to be sent to OBS."""
 
-        id: generator for producing unique integers for each request
-        data: dict containing the type of request and all necessary information
-        obs: the OBS container for ensuring parity between script and OBS
-        """
-        
-        self.id = _id
-        self.data = data
-        self.obs = obs
+        self.id: Generator[str, None, None] = _id
+        self.data: dict = data
+        self.obs: OBS = obs
 
-    def format(self) -> Optional[list[dict]]:
-        """
-        Returns a series of messages formatted to be sent to OBS
-        via the websocket. All custom requests begin with a
-        lower-case letter, while the websocket library requests
-        begin with an upper-case letter.
-        """
-        
-        msgs = []
-        mtype = self.data["type"]
+    def format(self) -> list[dict]: #type: ignore
+        """Returns a list of formatted messages to send to OBS."""
 
-        #Custom Requests
-        #Common requests to be used in the settings file
-        
-        #SceneCollection
+        msgs: list = []
+        mtype: str = self.data["type"]
 
-        #Scene
+        #Requests from obs-websockets version 4.8.0
 
-        if mtype == "transitionToScene":
+        #Configurable Interactions
+        if mtype == "showSource":
             msg: dict = {"message-id": next(self.id)}
+            msg["request-type"] = "SetSceneItemRender"
+            msg["source"] = self.data["target"]
+            msg["render"] = True
+            msgs.append(msg)
+
+        elif mtype == "hideSource":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = "SetSceneItemRender"
+            msg["source"] = self.data["target"]
+            msg["render"] = False
+            msgs.append(msg)
+
+        elif mtype == "toggleSource":
+            source = self.obs.getSource(self.data["target"])
+            if source != None:
+                msg = {"message-id": next(self.id)}
+                msg["request-type"] = "SetSceneItemRender"
+                msg["source"] = self.data["target"]
+                msg["render"] = not source.isVisible() #type: ignore
+                msgs.append(msg)
+
+        elif mtype == "showAllSources":
+            if self.obs.currentScene != None:
+                for source in self.obs.currentScene.sources: #type: ignore
+                    msg = {"message-id": next(self.id)}
+                    msg["request-type"] = "SetSceneItemRender"
+                    msg["source"] = source.name
+                    msg["render"] = True
+                    msgs.append(msg)
+
+        elif mtype == "hideAllSources":
+            if self.obs.currentScene != None:
+                for source in self.obs.currentScene.sources: #type: ignore
+                    msg = {"message-id": next(self.id)}
+                    msg["request-type"] = "SetSceneItemRender"
+                    msg["source"] = source.name
+                    msg["render"] = False
+                    msgs.append(msg)
+
+        elif mtype == "transitionToScene":
+            msg = {"message-id": next(self.id)}
             msg["request-type"] = "SetCurrentScene"
             msg["scene-name"] = self.data["target"]
             msgs.append(msg)
 
         elif mtype == "transitionToPreviousScene":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = "SetCurrentScene"
             if self.obs.previousScene != None:
-                #Assertion to make mypy happy
-                assert isinstance(self.obs.previousScene, Scene)
-                msg["scene-name"] = self.obs.previousScene.name
-            else:
-                print("No previous scene to transition to.")
-                return None
-            msgs.append(msg)
-
-        elif mtype == "hideAllSources":
-            if self.obs.currentScene != None:
-                #Assertion to make mypy happy
-                assert isinstance(self.obs.currentScene, Scene)
-                for target in self.obs.currentScene.getAllSceneItems():
-                    msg = {"message-id": next(self.id)}
-                    msg["request-type"] = "SetSceneItemProperties"
-                    msg["item"] = target.name
-                    msg["visible"] = False
-                    msgs.append(msg)
-
-        elif mtype == "showAllSources":
-            if self.obs.currentScene != None:
-                #Assertion to make mypy happy
-                assert isinstance(self.obs.currentScene, Scene)
-                for target in self.obs.currentScene.getAllSceneItems():
-                    msg = {"message-id": next(self.id)}
-                    msg["request-type"] = "SetSceneItemProperties"
-                    msg["item"] = target.name
-                    msg["visible"] = True
-                    msgs.append(msg)
-
-        #Source
-
-        elif mtype == "hideSource":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = "SetSceneItemProperties"
-            msg["item"] = self.data["target"]
-            msg["visible"] = False
-            msgs.append(msg)
-
-        elif mtype == "showSource":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = "SetSceneItemProperties"
-            msg["item"] = self.data["target"]
-            msg["visible"] = True
-            msgs.append(msg)
-
-        elif mtype == "toggleSource":
-            if self.obs.currentScene != None:
-                #Assertion to make mypy happy
-                assert isinstance(self.obs.currentScene, Scene)
                 msg = {"message-id": next(self.id)}
-                msg["request-type"] = "SetSceneItemProperties"
-                msg["item"] = self.data["target"]
-                msg["visible"] = not self.obs.currentScene.sceneItems[self.data["target"]].isVisible()
+                msg["request-type"] = "SetCurrentScene"
+                msg["scene-name"] = self.obs.previousScene.name #type: ignore
                 msgs.append(msg)
 
         elif mtype == "showFilter":
@@ -120,41 +93,30 @@ class Request:
             msgs.append(msg)
 
         elif mtype == "toggleFilter":
-            sceneItem = self.obs.getSceneItem(self.data["targetSource"])
-            if sceneItem != None:
-                #Assertions to make mypy happy
-                assert isinstance(sceneItem, SceneItem)
-                _filter = sceneItem.getFilter(self.data["targetFilter"])
+            source = self.obs.getSource(self.data["targetSource"])
+            if source != None:
+                _filter = source.getFilter(self.data["targetFilter"]) #type: ignore
                 if _filter != None:
-                    assert isinstance(_filter, Filter)
                     msg = {"message-id": next(self.id)}
                     msg["request-type"] = "SetSourceFilterVisibility"
                     msg["sourceName"] = self.data["targetSource"]
                     msg["filterName"] = self.data["targetFilter"]
-                    msg["filterEnabled"] = not _filter.enabled
+                    msg["filterEnabled"] = not _filter.isVisible() #type: ignore
                     msgs.append(msg)
 
         elif mtype == "editFilter":
+            #TODO: Better arbitrary filter support
             msg = {"message-id": next(self.id)}
             msg["request-type"] = "SetSourceFilterSettings"
             msg["sourceName"] = self.data["targetSource"]
             msg["filterName"] = self.data["targetFilter"]
-            value = self.data["value"]
-            if self.data["setting"] == "hue_shift":
+            value = self.data["data"]
+            if self.data["targetSetting"] == "hue_shift":
                 value = (((value - 0) * (180 - -180)) / (127 - 0)) + -180
-            msg["filterSettings"] = {self.data["setting"]: value}
+            msg["filterSettings"] = {self.data["targetSetting"]: value}
             msgs.append(msg)
 
-        #Filter
-
-        #Transition
-
-        #OBS Websocket Requests
-        #Full request list for the OBS Websocket library
-        #DO NOT INVOKE IN THE SETTINGS UNLESS YOU KNOW WHAT YOU ARE DOING!
-        #Requests with commented out msgs.append are not yet implemented
-
-        #General
+        #General Requests
         elif mtype == "GetVersion":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
@@ -200,187 +162,91 @@ class Request:
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        #Outputs
-        elif mtype == "ListOutputs":
+        elif mtype == "OpenProjector":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "GetOutputInfo":
+        elif mtype == "TriggerHotkeyByName":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "StartOutput":
+        elif mtype == "TriggerHotkeyBySequence":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "StopOutput":
+        #Media Control
+        elif mtype == "PlayPauseMedia":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        #Profiles
-        elif mtype == "SetCurrentProfile":
+        elif mtype == "RestartMedia":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "GetCurrentProfile":
+        elif mtype == "StopMedia":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "ListProfiles":
+        elif mtype == "NextMedia":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        #Recording
-        elif mtype == "StartStopRecording":
+        elif mtype == "PreviousMedia":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "StartRecording":
+        elif mtype == "GetMediaDuration":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "StopRecording":
+        elif mtype == "GetMediaTime":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "PauseRecording":
+        elif mtype == "SetMediaTime":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "ResumeRecording":
+        elif mtype == "ScrubMedia":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
-        elif mtype == "SetRecordingFolder":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "GetRecordingFolder":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        #Replay Buffer
-        elif mtype == "StartStopReplayBuffer":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "StartReplayBuffer":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "StopReplayBuffer":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "SaveReplayBuffer":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        #SceneCollections
-        elif mtype == "SetCurrentSceneCollection":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            msg["sc-name"] = self.data["sc-name"]
-            #msgs.append(msg)
-
-        elif mtype == "GetCurrentSceneCollection":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "ListSceneCollections":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        #Scene Items  
-        elif mtype == "GetSceneItemProperties":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            msg["item"] = self.data["item"]
-            #msgs.append(msg)
-
-        elif mtype == "SetSceneItemProperties":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            msg.update(self.data["updates"])
-            #msgs.append(msg)
-
-        elif mtype == "ResetSceneItem":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "SetSceneItemRender":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "SetSceneItemPosition":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "SetSceneItemTransform":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "SetSceneItemCrop":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "DeleteSceneItem":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "DuplicateSceneItem":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        #Scenes
-        elif mtype == "SetCurrentScene":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            #msgs.append(msg)
-
-        elif mtype == "GetCurrentScene":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            msgs.append(msg)
-
-        elif mtype == "GetSceneList":
-            msg = {"message-id": next(self.id)}
-            msg["request-type"] = mtype
-            msgs.append(msg)
-
-        elif mtype == "ReorderSceneItems":
+        elif mtype == "GetMediaState":
+            #Unreleased
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
 
         #Sources
+        elif mtype == "GetMediaSourcesList":
+            #Unreleased
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
         elif mtype == "GetSourcesList":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
@@ -412,6 +278,17 @@ class Request:
             #msgs.append(msg)
 
         elif mtype == "ToggleMute":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetAudioActive":
+            #Unreleased
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSourceName":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
@@ -505,20 +382,245 @@ class Request:
         elif mtype == "SetSourceFilterSettings":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
-            msg["sourceName"] = self.data["sourceName"]
-            msg["filterName"] = self.data["filterName"]
-            msg["filterSettings"] = self.data["filterSettings"]
-            msgs.append(msg)
+            #msgs.append(msg)
 
         elif mtype == "SetSourceFilterVisibility":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
-            msg["sourceName"] = self.data["sourceName"]
-            msg["filterName"] = self.data["filterName"]
-            msg["filterEnabled"] = self.data["filterEnabled"]
-            msgs.append(msg)
+            #msgs.append(msg)
+
+        elif mtype == "GetAudioMonitorType":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetAudioMonitorType":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
 
         elif mtype == "TakeSourceScreenshot":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Outputs
+        elif mtype == "ListOutputs":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetOutputInfo":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StartOutput":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StopOutput":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Profiles
+        elif mtype == "SetCurrentProfile":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetCurrentProfile":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "ListProfiles":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Recording
+        elif mtype == "GetRecordingStatus":
+            #Unreleased
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StartStopRecording":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StartRecording":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StopRecording":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "PauseRecording":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "ResumeRecording":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetRecordingFolder":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetRecordingFolder":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Replay Buffer
+        elif mtype == "GetReplayBufferStatus":
+            #Unreleased
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StartStopReplayBuffer":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StartReplayBuffer":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "StopReplayBuffer":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SaveReplayBuffer":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Scene Collections
+        elif mtype == "SetCurrentSceneCollection":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetCurrentSceneCollection":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "ListSceneCollections":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Scene Items
+        elif mtype == "GetSceneItemList":
+            #Unreleased
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetSceneItemProperties":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSceneItemProperties":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "ResetSceneItem":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSceneItemRender":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSceneItemPosition":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSceneItemTransform":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSceneItemCrop":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "DeleteSceneItem":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "AddSceneItem":
+            #Unreleased
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "DuplicateSceneItem":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        #Scenes
+        elif mtype == "SetCurrentScene":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetCurrentScene":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            msgs.append(msg)
+
+        elif mtype == "GetSceneList":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            msgs.append(msg)
+
+        elif mtype == "CreateScene":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "ReorderSceneItems":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "SetSceneTransitionOverride":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "RemoveSceneTransitionOverride":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
+
+        elif mtype == "GetSceneTransitionOverride":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
             #msgs.append(msg)
@@ -626,26 +728,24 @@ class Request:
             msg["request-type"] = mtype
             #msgs.append(msg)
 
+        elif mtype == "GetTransitionPosition":
+            msg = {"message-id": next(self.id)}
+            msg["request-type"] = mtype
+            #msgs.append(msg)
 
         else:
-            print("Malformed request data: " + str(self.data))
-            return None
+            print(f"Unknown request with type {mtype}.")
 
         return msgs
 
 class Response:
-    """Structure that handles repsonses from OBS"""
+    """Structure that handles responses from OBS."""
 
     def __init__(self, data: dict, obs: OBS) -> None:
-        """
-        Initializes a response to handle a message from OBS.
+        """Initializes a response to handle a message from OBS."""
 
-        data: dict of the information received from OBS
-        obs: the OBS container for ensuring parity between script and OBS
-        """
-        
-        self.data = data
-        self.obs = obs
+        self.data: dict = data
+        self.obs: OBS = obs
 
     def handle(self) -> None:
         """Updates the state of the OBS container according to the response."""
@@ -655,9 +755,10 @@ class Response:
                 print(self.data["error"])
                 return
             else:
-                requestData = self.obs.requests.pop(self.data["message-id"])
+                requestData = self.obs.pendingResponses.pop(self.data["message-id"])
                 request = requestData["request-type"]
-                #Responses
+                #Requests as of version 4.8.0
+
                 #General
                 if request == "GetVersion":
                     pass
@@ -669,6 +770,7 @@ class Response:
                     pass
 
                 elif request == "SetHeartbeat":
+                    #To be removed in 5.0.0
                     pass
 
                 elif request == "SetFilenameFormatting":
@@ -686,118 +788,64 @@ class Response:
                 elif request == "GetVideoInfo":
                     pass
 
-                #Outputs
-                elif request == "ListOutputs":
+                elif request == "OpenProjector":
                     pass
 
-                elif request == "GetOutputInfo":
+                elif request == "TriggerHotkeyByName":
+                    #Unreleased
                     pass
 
-                elif request == "StartOutput":
+                elif request == "TriggerHotkeyBySequence":
+                    #Unreleased
                     pass
 
-                elif request == "StopOutput":
+                #Media Control
+                elif request == "PlayPauseMedia":
+                    #Unreleased
                     pass
 
-                #Profiles
-                elif request == "SetCurrentProfile":
+                elif request == "RestartMedia":
+                    #Unreleased
                     pass
 
-                elif request == "GetCurrentProfile":
+                elif request == "StopMedia":
+                    #Unreleased
                     pass
 
-                elif request == "ListProfiles":
+                elif request == "NextMedia":
+                    #Unreleased
                     pass
 
-                #Recording
-                elif request == "StartStopRecording":
+                elif request == "PreviousMedia":
+                    #Unreleased
                     pass
 
-                elif request == "StartRecording":
+                elif request == "GetMediaDuration":
+                    #Unreleased
                     pass
 
-                elif request == "StopRecording":
+                elif request == "GetMediaTime":
+                    #Unreleased
                     pass
 
-                elif request == "PauseRecording":
+                elif request == "SetMediaTime":
+                    #Unreleased
                     pass
 
-                elif request == "ResumeRecording":
+                elif request == "ScrubMedia":
+                    #Unreleased
                     pass
 
-                elif request == "SetRecordingFolder":
-                    pass
-
-                elif request == "GetRecordingFolder":
-                    pass
-
-                #Replay Buffer
-                elif request == "StartStopReplayBuffer":
-                    pass
-
-                elif request == "StartReplayBuffer":
-                    pass
-
-                elif request == "StopReplayBuffer":
-                    pass
-
-                elif request == "SaveReplayBuffer":
-                    pass
-
-                #SceneCollections
-                elif request == "SetCurrentSceneCollection":
-                    pass
-
-                elif request == "GetCurrentSceneCollection":
-                    pass
-
-                elif request == "ListSceneCollections":
-                    pass
-
-                #SceneItems
-                elif request == "GetSceneItemProperties":
-                    pass
-
-                elif request == "SetSceneItemProperties":
-                    pass
-
-                elif request == "ResetSceneItem":
-                    pass
-
-                elif request == "SetSceneItemRender":
-                    pass
-
-                elif request == "SetSceneItemPosition":
-                    pass
-
-                elif request == "SetSceneItemTransform":
-                    pass
-
-                elif request == "SetSceneItemCrop":
-                    pass
-
-                elif request == "DeleteSceneItem":
-                    pass
-
-                elif request == "DuplicateSceneItem":
-                    pass
-
-                #Scenes
-                elif request == "SetCurrentScene":
-                    pass
-
-                elif request == "GetCurrentScene":
-                    self.obs.setCurrentScene(self.data["name"])
-
-                elif request == "GetSceneList":
-                    for scene in self.data["scenes"]:
-                        self.obs.addScene(scene)
-                    self.obs.setCurrentScene(self.data["current-scene"])
-
-                elif request == "ReorderSceneItems":
+                elif request == "GetMediaState":
+                    #Unreleased
                     pass
 
                 #Sources
+
+                elif request == "GetMediaSourcesList":
+                    #Unreleased
+                    pass
+
                 elif request == "GetSourcesList":
                     pass
 
@@ -817,6 +865,12 @@ class Response:
                     pass
 
                 elif request == "ToggleMute":
+                    pass
+
+                elif request == "GetAudioActive":
+                    pass
+
+                elif request == "SetSourceName":
                     pass
 
                 elif request == "SetSyncOffset":
@@ -853,12 +907,13 @@ class Response:
                     pass
 
                 elif request == "GetSourceFilters":
-                    source = self.obs.getSceneItem(requestData["sourceName"])
+                    source = self.obs.getSource(requestData["sourceName"])
                     if source != None:
-                        #Assertion to make mypy happy
-                        assert isinstance(source, SceneItem)
                         for _filter in self.data["filters"]:
-                            source.addFilter(_filter)
+                            source.addFilter(_filter) #type: ignore
+
+                elif request == "GetSourceFilterInfo":
+                    pass
 
                 elif request == "AddFilterToSource":
                     pass
@@ -877,8 +932,153 @@ class Response:
 
                 elif request == "SetSourceFilterVisibility":
                     pass
+                
+                elif request == "GetAudioMonitorType":
+                    pass
+
+                elif request == "SetAudioMonitorType":
+                    pass
 
                 elif request == "TakeSourceScreenshot":
+                    pass
+
+                #Outpute
+                elif request == "ListOutputs":
+                    pass
+
+                elif request == "GetOutputInfo":
+                    pass
+
+                elif request == "StartOutput":
+                    pass
+
+                elif request == "StopOutput":
+                    pass
+
+                #Profiles
+                elif request == "SetCurrentProfile":
+                    pass
+
+                elif request == "GetCurrentProfile":
+                    pass
+
+                elif request == "ListProfiles":
+                    pass
+
+                #Recording
+                elif request == "GetRecordingStatus":
+                    #Unreleased
+                    pass
+
+                elif request == "StartStopRecording":
+                    pass
+
+                elif request == "StartRecording":
+                    pass
+
+                elif request == "StopRecording":
+                    pass
+
+                elif request == "PauseRecording":
+                    pass
+
+                elif request == "ResumeRecording":
+                    pass
+
+                elif request == "SetRecordingFolder":
+                    pass
+
+                elif request == "GetRecordingFolder":
+                    pass
+
+                #Replay Buffer
+                elif request == "GetReplayBufferStatus":
+                    #Unreleased
+                    pass
+
+                elif request == "StartStopReplayBuffer":
+                    pass
+
+                elif request == "StartReplayBuffer":
+                    pass
+
+                elif request == "StopReplayBuffer":
+                    pass
+
+                elif request == "SaveReplayBuffer":
+                    pass
+
+                #Scene Collections
+                elif request == "SetCurrentSceneCollection":
+                    pass
+
+                elif request == "GetCurrentSceneCollection":
+                    pass
+
+                elif request == "ListSceneCollections":
+                    pass
+
+                #Scene Items
+                elif request == "GetSceneItemList":
+                    #Unreleased
+                    pass
+
+                elif request == "GetSceneItemProperties":
+                    pass
+
+                elif request == "SetSceneItemProperties":
+                    pass
+
+                elif request == "ResetSceneItem":
+                    pass
+
+                elif request == "SetSceneItemRender":
+                    pass
+
+                elif request == "SetSceneItemPosition":
+                    pass
+
+                elif request == "SetSceneItemTransform":
+                    pass
+
+                elif request == "SetSceneItemCrop":
+                    pass
+
+                elif request == "DeleteSceneItem":
+                    pass
+
+                elif request == "AddSceneItem":
+                    #Unreleased
+                    pass
+
+                elif request == "DuplicateSceneItem":
+                    pass
+
+                #Scenes
+                elif request == "SetCurrentScene":
+                    pass
+
+                elif request == "GetCurrentScene":
+                    self.obs.setCurrentScene(self.data["name"])
+
+                elif request == "GetSceneList":
+                    for scene in self.data["scenes"]:
+                        self.obs.addScene(scene)
+                    self.obs.setCurrentScene(self.data["current-scene"])
+
+                elif request == "CreateScene":
+                    pass
+
+                elif request == "ReorderSceneItems":
+                    pass
+
+                elif request == "SetSceneTransitionOverride":
+                    pass
+
+                elif request == "RemoveSceneTransitionOverride":
+                    pass
+
+                elif request == "GetSceneTransitionOverride":
                     pass
 
                 #Streaming
@@ -944,170 +1144,230 @@ class Response:
                 elif request == "GetTransitionDuration":
                     pass
 
+                elif request == "GetTransitionPosition":
+                    pass
+
                 else:
-                    print("Malformed response data:\ntype: " + str(request) + "\ndata: " + str(self.data))
-            
+                    print(f"Unhandled response of type {request} and data {self.data}.")
+
+                
+
         else:
-            #Events
+            event: str = self.data["update-type"]
+            #Events as of 4.8.0
+
             #Scenes
-            if self.data["update-type"] == "SwitchScenes":
+            if event == "SwitchScenes":
                 self.obs.setCurrentScene(self.data["scene-name"])
-            
-            elif self.data["update-type"] == "ScenesChanged":
+
+            elif event == "ScenesChanged":
                 pass
 
-            elif self.data["update-type"] == "SceneCollectionChanged":
+            elif event == "SceneCollectionChanged":
                 pass
 
-            elif self.data["update-type"] == "SceneCollectionListChanged":
+            elif event == "SceneCollectionListChanged":
                 pass
 
             #Transitions
-            elif self.data["update-type"] == "SwitchTransition":
+            elif event == "SwitchTransition":
                 pass
 
-            elif self.data["update-type"] == "TransitionListedChanged":
+            elif event == "TransitionListChanged":
                 pass
 
-            elif self.data["update-type"] == "TransitionDurationChanged":
+            elif event == "TransitionDurationChanged":
                 pass
 
-            elif self.data["update-type"] == "TransitionBegin":
+            elif event == "TransitionBegin":
+                pass
+
+            elif event == "TransitionEnd":
+                pass
+
+            elif event == "TransitionVideoEnd":
                 pass
 
             #Profiles
-            elif self.data["update-type"] == "ProfileChanged":
+            elif event == "ProfileChanged":
                 pass
 
-            elif self.data["update-type"] == "ProfileListChanged":
+            elif event == "ProfileListChanged":
                 pass
 
             #Streaming
-            elif self.data["update-type"] == "StreamStarting":
+            elif event == "StreamStarting":
                 pass
 
-            elif self.data["update-type"] == "StreamStarted":
+            elif event == "StreamStarted":
                 pass
 
-            elif self.data["update-type"] == "StreamStopping":
+            elif event == "StreamStopping":
                 pass
 
-            elif self.data["update-type"] == "StreamStopped":
+            elif event == "StreamStopped":
                 pass
 
-            elif self.data["update-type"] == "StreamStatus":
+            elif event == "StreamStatus":
                 pass
 
             #Recording
-            elif self.data["update-type"] == "RecordingStarting":
+            elif event == "RecordingStarting":
                 pass
 
-            elif self.data["update-type"] == "RecordingStarted":
+            elif event == "RecordingStarted":
                 pass
 
-            elif self.data["update-type"] == "RecordingStopping":
+            elif event == "RecordingStopping":
                 pass
 
-            elif self.data["update-type"] == "RecordingStopped":
+            elif event == "RecordingStopped":
                 pass
 
-            elif self.data["update-type"] == "RecordingPaused":
+            elif event == "RecordingPaused":
                 pass
 
-            elif self.data["update-type"] == "RecordingResumed":
+            elif event == "RecordingResumed":
                 pass
 
             #Replay Buffer
-            elif self.data["update-type"] == "ReplayStarting":
+            elif event == "ReplayStarting":
                 pass
 
-            elif self.data["update-type"] == "ReplayStarted":
+            elif event == "ReplayStarted":
                 pass
 
-            elif self.data["update-type"] == "ReplayStopping":
+            elif event == "ReplayStopping":
                 pass
 
-            elif self.data["update-type"] == "ReplayStopped":
+            elif event == "ReplayStopped":
                 pass
 
             #Other
-            elif self.data["update-type"] == "Exiting":
+            elif event == "Exiting":
                 pass
 
             #General
-            elif self.data["update-type"] == "Heartbeat":
+            elif event == "Heartbeat":
                 pass
 
-            elif self.data["update-type"] == "BroadcastCustomMessage":
+            elif event == "BroadcastCustomMessage":
                 pass
 
             #Sources
-            elif self.data["update-type"] == "SourceCreated":
+            elif event == "SourceCreated":
                 pass
 
-            elif self.data["update-type"] == "SourceDestroyed":
+            elif event == "SourceDestoryed":
                 pass
 
-            elif self.data["update-type"] == "SourceVolumeChanged":
+            elif event == "SourceVolumeChanged":
                 pass
 
-            elif self.data["update-type"] == "SourceMuteStateChanged":
+            elif event == "SourceMuteStateChanged":
                 pass
 
-            elif self.data["update-type"] == "SourceAudioSyncOffsetChanged":
+            elif event == "SourceAudioDeactivated":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SourceAudioMixersChanged":
+            elif event == "SourceAudioActivated":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SourceRenamed":
+            elif event == "SourceAudioSyncOffsetChanged":
                 pass
 
-            elif self.data["update-type"] == "SourceFilterAdded":
+            elif event == "SourceAudioMixersChanged":
                 pass
 
-            elif self.data["update-type"] == "SourceFilterRemoved":
+            elif event == "SourceRenamed":
                 pass
 
-            elif self.data["update-type"] == "SourceFilterVisibilityChanged":
-                source = self.obs.getSceneItem(self.data["sourceName"])
+            elif event == "SourceFilterAdded":
+                pass
+
+            elif event == "SourceFilterRemoved":
+                pass
+
+            elif event == "SourceFilterVisibilityChanged":
+                source = self.obs.getSource(self.data["sourceName"])
                 if source != None:
-                    #Assertions to make mypy happy
-                    assert isinstance(source, SceneItem)
-                    _filter = source.getFilter(self.data["filterName"])
+                    _filter = source.getFilter(self.data["filterName"]) #type: ignore
                     if _filter != None:
-                        assert isinstance(_filter, Filter)
-                        _filter.enabled = self.data["filterEnabled"]
+                        _filter.setVisible(self.data["filterEnabled"]) #type: ignore
 
-            elif self.data["update-type"] == "SourceFiltersReordered":
+            elif event == "SourceFiltersReordered":
                 pass
 
-            elif self.data["update-type"] == "SourceOrderChanged":
+            #Media
+            elif event == "MediaPlaying":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SceneItemAdded":
+            elif event == "MediaPaused":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SceneItemRemoved":
+            elif event == "MediaRestarted":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SceneItemVisibilityChanged":
-                self.obs.scenes[self.data["scene-name"]].sceneItems[self.data["item-name"]].data["render"] = self.data["item-visible"]
-
-            elif self.data["update-type"] == "SceneItemTransformChanged":
+            elif event == "MediaStopped":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SceneItemSelected":
+            elif event == "MediaNext":
+                #Unreleased
                 pass
 
-            elif self.data["update-type"] == "SceneItemDeselected":
+            elif event == "MediaPrevious":
+                #Unreleased
+                pass
+
+            elif event == "MediaStarted":
+                #Unreleased
+                pass
+
+            elif event == "MediaEnded":
+                #Unreleased
+                pass
+
+            #Scene Items
+            elif event == "SceneItemOrderChanged":
+                pass
+
+            elif event == "SceneItemAdded":
+                pass
+
+            elif event == "SceneItemRemoved":
+                pass
+
+            elif event == "SceneItemVisibilityChanged":
+                scene = self.obs.getScene(self.data["scene-name"])
+                if scene != None:
+                    source = scene.getSource(self.data["item-name"]) #type: ignore
+                    if source != None:
+                        source.setVisible(self.data["item-visible"]) #type: ignore
+                        
+
+            elif event == "SceneItemLockChanged":
+                pass
+
+            elif event == "SceneItemTransformChanged":
+                pass
+
+            elif event == "SceneItemSelected":
+                pass
+
+            elif event == "SceneItemDeselected":
                 pass
 
             #Studio Mode
-            elif self.data["update-type"] == "PreviewSceneChange":
+            elif event == "PreviewSceneChanged":
                 pass
 
-            elif self.data["update-type"] == "StudioModeSwitched":
+            elif event == "StudioModeSwitched":
                 pass
 
             #Unhandled Events

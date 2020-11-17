@@ -1,136 +1,145 @@
-from typing import Union, Optional
+from typing import Optional
 
 class OBS:
-    """Container that holds information regarding the current state of OBS."""
+    """Data container for information pertaining to the current state of OBS."""
 
     def __init__(self) -> None:
-        """Initializes an OBS container."""
+        """Initializes the OBS container"""
 
-        self.scenes: dict = {}
-        self.currentScene: Union[Scene, None] = None
-        self.previousScene: Union[Scene, None] = None
+        self.scenes: list[Scene] = [] #type: ignore
 
-        self.requests: dict = {}
-        self.updates: list = []
+        self.currentScene: Optional[Scene] = None
+        self.previousScene: Optional[Scene] = None
 
-    def clearScenes(self) -> None:
-        """Removes all scenes and resets current and previous scene to None."""
-        
-        self.scenes = {}
-        self.currentScene = None
-        self.previousScene = None
+        self.requests: list = []
+        self.pendingResponses: dict = {}
 
-    def addScene(self, scene: dict) -> None:
-        """
-        Adds new Scene with all SceneItems.
+    def addScene(self, data: dict) -> None:
+        """Adds a scene to the container."""
 
-        scene: a dict that contains a:
-            name - str
-            sources - list of dicts that define SceneItems
-        """
+        scene = Scene(data)
 
-        name = scene["name"]
-        self.scenes[name] = Scene(name)
-        for sceneItem in scene["sources"]:
-            self.scenes[name].addSceneItem(sceneItem)
-            self.updates.append({"type": "GetSourceFilters", "target": sceneItem["name"]})
-        
+        for source in scene.sources:
+            self.requests.append({
+                "type": "GetSourceFilters",
+                "target": source.name,
+                })
 
-    def setCurrentScene(self, scene: str) -> None:
-        """Updates previousScene to currentScene and sets currentScene to Scene."""
+        self.scenes.append(scene)
 
-        if self.scenes.get(scene) == None:
-            print("No Scene with name: " + scene)
-        else:
-            self.previousScene = self.currentScene
-            self.currentScene = self.scenes[scene]
-
-    def getSceneItem(self, name: str) -> Optional["SceneItem"]:
-        """Returns the SceneItem with the requested name."""
+    def removeScene(self, name: str) -> None:
+        """Remove a scene from the container."""
 
         for scene in self.scenes:
-            for sceneItem in self.scenes[scene].sceneItems:
-                if sceneItem == name:
-                    return self.scenes[scene].sceneItems[sceneItem]
+            if scene.name == name:
+                self.scenes.remove(scene)
+                return
+
+    def getScene(self, name: str) -> Optional["Scene"]:
+        """Returns reference to scene called name, if it exists."""
+
+        for scene in self.scenes:
+            if scene.name == name:
+                return scene
         return None
 
-class SceneCollection:
-    """Container that holds information regarding a Scene Collection."""
+    def getSource(self, name: str) -> Optional["Source"]:
+        """Returns reference to source in any scene called name, if it exists."""
 
-    def __init__(self, name: str) -> None:
-        """
-        Initializes a SceneCollection.
+        for scene in self.scenes:
+            for source in scene.sources:
+                if source.name == name:
+                    return source
+        return None
 
-        name - str name of Scene Collection
-        """
+    def setCurrentScene(self, name: str) -> None:
+        """Moves currentScene to previousScene and sets the named scene to current."""
 
-        self.name = name  
+        for scene in self.scenes:
+            if scene.name == name:
+                self.previousScene = self.currentScene
+                self.currentScene = scene
+                return
 
 class Scene:
-    """Container that holds information regarding a Scene."""
-
-    def __init__(self, name: str) -> None:
-        """
-        Initializes a Scene.
-
-        name - str name of Scene
-        """
-        
-
-        self.name = name
-        self.sceneItems: dict = {}
-
-    def addSceneItem(self, sceneItem: dict) -> None:
-        """
-        Adds a new SceneItem with all data.
-
-        sceneItem: a dict that contains a name str and other sceneItem data
-        """
-
-        self.sceneItems[sceneItem["name"]] = SceneItem(sceneItem)
-
-    def getAllSceneItems(self) -> list["SceneItem"]:
-        """Returns list of all SceneItems in Scene."""
-
-        sceneItems = []
-        for key in self.sceneItems.keys():
-            sceneItems.append(self.sceneItems[key])
-        return sceneItems
-
-class SceneItem:
-    """Container that hold information regarding a SceneItem."""
+    """Data container for information pertaining to the current state of a scene."""
 
     def __init__(self, data: dict) -> None:
-        """Initializes a SceneItem from a dict."""
+        """Initializes a scene."""
 
-        self.name = data["name"]
-        self.data = data
-        self.filters: list = []
+        self.name: str = data["name"]
+        self.sources: list[Source] = [] #type: ignore
 
-    def isVisible(self) -> bool:
-        """Returns if the SceneItem is visible in OBS."""
+        for source in data["sources"]:
+            self.addSource(source)
 
-        return self.data["render"]
+    def addSource(self, data: dict) -> None:
+        """Adds a source to the source list."""
 
-    def addFilter(self, _filter: dict) -> None:
-        """Adds a filter to the list of filters."""
+        self.sources.append(Source(data))
 
-        self.filters.append(Filter(_filter))
+    def getSource(self, name: str) -> Optional["Source"]:
+        """Returns reference to source called name, if it exists."""
 
-    def getFilter(self, filterName: str) -> Optional["Filter"]:
-        """Returns the filter with name filterName."""
+        for source in self.sources:
+            if source.name == name:
+                return source
+        return None
+
+class Source:
+    """Data container for information pertaining to the current state of a source."""
+
+    def __init__(self, data: dict) -> None:
+        """Initializes a source."""
+
+        self.name: str = data["name"]
+        self.data: dict = data
+        self.filters: list[Filter] = [] #type: ignore
+
+    def addFilter(self, data: dict) -> None:
+        """Adds a filter to the source."""
+
+        self.filters.append(Filter(data))
+
+    def getFilter(self, name: str) -> Optional["Filter"]:
+        """Returns the named filter if present in the source."""
 
         for _filter in self.filters:
-            if _filter.name == filterName:
+            if _filter.name == name:
                 return _filter
         return None
 
+    def isVisible(self) -> bool:
+        """Returns if the source is visible."""
+
+        return self.data["render"]
+
+    def setVisible(self, visible: bool) -> None:
+        """Sets source visibility."""
+
+        self.data["render"] = visible
+
 class Filter:
-    """Container that holds information regarding a Filter."""
+    """Data container for information pertaining to the current state of a filter."""
 
-    def __init__(self, data:dict) -> None:
+    def __init__(self, data: dict) -> None:
+        """Initializes a filter."""
 
-        self.name = data["name"]
-        self.settings = data["settings"]
-        self.type = data["type"]
-        self.enabled = data["enabled"]
+        self.name: str = data["name"]
+        self.settings: dict = data["settings"]
+        self.type: str = data["type"]
+        self.enabled: bool = data["enabled"]
+
+    def isVisible(self) -> bool:
+        """Returns if the filter is visible."""
+
+        return self.enabled
+
+    def setVisible(self, visible: bool) -> None:
+        """Sets filter visibility."""
+
+        self.enabled = visible
+
+        
+
+        
