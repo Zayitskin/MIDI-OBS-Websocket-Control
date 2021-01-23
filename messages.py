@@ -1,4 +1,6 @@
-#from typing import Optional
+from __future__ import annotations #for python3.8 or less
+
+
 from collections.abc import Generator
 
 from structures import OBS, Scene, Source, Filter
@@ -1161,6 +1163,7 @@ class Response:
                 self.obs.setCurrentScene(self.data["scene-name"])
 
             elif event == "ScenesChanged":
+                #self.obs.purgeScenes()
                 pass
 
             elif event == "SceneCollectionChanged":
@@ -1258,7 +1261,7 @@ class Response:
             elif event == "SourceCreated":
                 pass
 
-            elif event == "SourceDestoryed":
+            elif event == "SourceDestroyed":
                 pass
 
             elif event == "SourceVolumeChanged":

@@ -1,3 +1,5 @@
+from __future__ import annotations #for python3.8 or less
+
 import websockets, asyncio, yaml, json, sys, argparse
 import mido #type: ignore
 
@@ -150,7 +152,7 @@ if __name__ == "__main__":
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument("--config", type = str, default = "settings.yaml")
     parser.add_argument("--port", type = str, default = "")
-    parser.add_argument("--debug", type = bool, default = False)
+    parser.add_argument("--debug", action = "store_true")
 
     args: argparse.Namespace = parser.parse_args()
 
