@@ -1,3 +1,5 @@
+from __future__ import annotations #for python3.8 or less
+
 from typing import Optional
 
 class OBS:
@@ -35,6 +37,15 @@ class OBS:
                 self.scenes.remove(scene)
                 return
 
+    def purgeScenes(self) -> None:
+        """Remove all scenes from the container"""
+
+
+        print("\n\nPurging scenes!\n\n")
+
+        self.scenes = []
+        self.requests.append({"type": "GetSceneList"})
+
     def getScene(self, name: str) -> Optional["Scene"]:
         """Returns reference to scene called name, if it exists."""
 
@@ -44,13 +55,13 @@ class OBS:
         return None
 
     def getSource(self, name: str) -> Optional["Source"]:
-        """Returns reference to source in any scene called name, if it exists."""
+        """Returns reference to source in active, if it exists."""
 
-        for scene in self.scenes:
-            for source in scene.sources:
-                if source.name == name:
-                    return source
+        for source in self.currentScene.sources:
+            if source.name == name:
+                return source
         return None
+        #TODO: Search in non-current scene
 
     def setCurrentScene(self, name: str) -> None:
         """Moves currentScene to previousScene and sets the named scene to current."""
