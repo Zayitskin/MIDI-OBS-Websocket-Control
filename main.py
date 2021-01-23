@@ -39,6 +39,19 @@ def getConfig(path: str) -> dict:
                 config["note_on"][command["value"]].append(command)
             if command["style"] == "close" or command["style"] == "latch":
                 config["note_off"][command["value"]].append(command)
+            if command["style"] == "mirror" and command["type"] == "mirrorSource":
+                config["note_on"][command["value"]].append({
+                    "type": "showSource",
+                    "target": command["target"],
+                    "trigger": command["trigger"],
+                    "style": "open",
+                    "value": command["value"]})
+                config["note_off"][command["value"]].append({
+                    "type": "hideSource",
+                    "target": command["target"],
+                    "trigger": command["trigger"],
+                    "style": "close",
+                    "value": command["value"]})
         else:
             config[command["trigger"]][command["value"]].append(command)
             
