@@ -1,5 +1,7 @@
 from __future__ import annotations #for python3.8 or less
 
+from hashlib import sha256
+from base64 import b64encode
 
 from collections.abc import Generator
 
@@ -127,12 +129,13 @@ class Request:
         elif mtype == "GetAuthRequired":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
-            #msgs.append(msg)
+            msgs.append(msg)
 
         elif mtype == "Authenticate":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
-            #msgs.append(msg)
+            msg["auth"] = self.data["auth"]
+            msgs.append(msg)
 
         elif mtype == "SetHeartbeat":
             msg = {"message-id": next(self.id)}
@@ -766,10 +769,24 @@ class Response:
                     pass
 
                 elif request == "GetAuthRequired":
-                    pass
+                    if self.data["authRequired"]:
+                        secret_string: str = self.obs.password + self.data["salt"]
+                        secret_hash: sha256 = sha256(secret_string.encode("utf-8"))
+                        secret: bytes = b64encode(secret_hash.digest())
+
+                        response_string: str = secret.decode("utf-8") + self.data["challenge"]
+                        response_hash: sha256 = sha256(response_string.encode("utf-8"))
+                        response: bytes = b64encode(response_hash.digest())
+
+                        self.obs.requests.append({
+                            "type": "Authenticate",
+                            "auth": response.decode("utf-8")})
+
+                    else:
+                        self.obs.requests.append({"type": "GetSceneList"})
 
                 elif request == "Authenticate":
-                    pass
+                    self.obs.requests.append({"type": "GetSceneList"})
 
                 elif request == "SetHeartbeat":
                     #To be removed in 5.0.0

@@ -5,8 +5,10 @@ from typing import Optional
 class OBS:
     """Data container for information pertaining to the current state of OBS."""
 
-    def __init__(self) -> None:
+    def __init__(self, password: Optional[str] = None) -> None:
         """Initializes the OBS container"""
+
+        self.password: Optional[str] = password
 
         self.scenes: list[Scene] = [] #type: ignore
 

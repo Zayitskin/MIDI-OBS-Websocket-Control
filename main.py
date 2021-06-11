@@ -60,7 +60,7 @@ def getConfig(path: str) -> dict:
 class WebsocketHandler:
     """Wrapper for interacting with the OBS websocket."""
 
-    def __init__(self, path: str, port: str, debug: bool) -> None:
+    def __init__(self, path: str, port: str, debug: bool, password: str) -> None:
         """Initializes websocket handler with config from the path."""
 
         self.config: dict = getConfig(path)
@@ -77,12 +77,12 @@ class WebsocketHandler:
 
         self._id: Generator[str, None, None] = Id()
 
-        self.obs: OBS = OBS()
+        self.obs: OBS = OBS(password)
         self.requests: list[Request] = [] #type: ignore
         self.responses: list[Response] = [] #type: ignore
 
         self.requests.append(Request(
-            self._id, {"type": "GetSceneList"}, self.obs))
+            self._id, {"type": "GetAuthRequired"}, self.obs))
 
 
     async def read(self, websocket: websockets.WebSocketClientProtocol) -> None:
@@ -166,8 +166,9 @@ if __name__ == "__main__":
     parser.add_argument("--config", type = str, default = "settings.yaml")
     parser.add_argument("--port", type = str, default = "")
     parser.add_argument("--debug", action = "store_true")
+    parser.add_argument("--password", type = str, default = "")
 
     args: argparse.Namespace = parser.parse_args()
 
-    websocketHandler: WebsocketHandler = WebsocketHandler(args.config, args.port, args.debug)
+    websocketHandler: WebsocketHandler = WebsocketHandler(args.config, args.port, args.debug, args.password)
     asyncio.get_event_loop().run_until_complete(websocketHandler.run())
