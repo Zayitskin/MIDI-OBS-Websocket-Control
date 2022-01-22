@@ -556,7 +556,9 @@ class Request:
         elif mtype == "SetSceneItemRender":
             msg = {"message-id": next(self.id)}
             msg["request-type"] = mtype
-            #msgs.append(msg)
+            msg["source"] = self.data["source"]
+            msg["render"] = self.data["render"]
+            msgs.append(msg)
 
         elif mtype == "SetSceneItemPosition":
             msg = {"message-id": next(self.id)}
@@ -1178,6 +1180,16 @@ class Response:
             #Scenes
             if event == "SwitchScenes":
                 self.obs.setCurrentScene(self.data["scene-name"])
+                print("\nMaintaining State\n")
+                for source in self.data["sources"]:
+                    print(f"{source=}")
+                    osource = self.obs.previousScene.getSource(source["name"])
+                    print(f"{osource=}")
+                    if osource != None:
+                        self.obs.requests.append({"type": "SetSceneItemRender",
+                                                  "source": source["name"],
+                                                  "render": osource.isVisible()})
+                        print(f"Added request {self.obs.requests[-1]}\n")
 
             elif event == "ScenesChanged":
                 #self.obs.purgeScenes()
@@ -1369,6 +1381,9 @@ class Response:
                     source = scene.getSource(self.data["item-name"]) #type: ignore
                     if source != None:
                         source.setVisible(self.data["item-visible"]) #type: ignore
+                        self.obs.soundboardUpdates.append({"event": "SceneItemVisibilityChanged",
+                                                           "source": source.name,
+                                                           "visible": self.data["item-visible"]})
                         
 
             elif event == "SceneItemLockChanged":

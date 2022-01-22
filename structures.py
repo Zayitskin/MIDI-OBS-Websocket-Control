@@ -17,6 +17,7 @@ class OBS:
 
         self.requests: list = []
         self.pendingResponses: dict = {}
+        self.soundboardUpdates: list = []
 
     def addScene(self, data: dict) -> None:
         """Adds a scene to the container."""
@@ -152,7 +153,3 @@ class Filter:
         """Sets filter visibility."""
 
         self.enabled = visible
-
-        
-
-        
