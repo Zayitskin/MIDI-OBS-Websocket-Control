@@ -1,174 +1,292 @@
-from __future__ import annotations #for python3.8 or less
+from __future__ import annotations #for python3.9 and less
 
-import websockets, asyncio, yaml, json, sys, argparse
-import mido #type: ignore
+import argparse
+import asyncio
+import json
+import mido
+import websockets
 
-from collections import defaultdict as ddict
+from base64 import b64encode
+from contextlib import contextmanager
+from hashlib import sha256
+
 from collections.abc import Generator
-from typing import Optional, NoReturn
+from typing import NoReturn
+from typing import Optional
 
-from messages import Request, Response
-from structures import OBS, Scene, Source
+from structures import OBS
+
 
 def Id() -> Generator[str, None, None]:
-    """Unique id generator."""
+    """Unique ID generator."""
 
     i: int = 0
     while True:
         yield str(i)
         i += 1
 
-def getConfig(path: str) -> dict:
-    """Loads config from file at path."""
+def authenticate(hello: str, password: str) -> str:
+    """Does the necessary steps to generate a valid authentication message."""
+    #First, turn the string into a json object so it can be parsed
+    data: dict = json.loads(hello)["d"]["authentication"]
     
-    with open(path, "r") as file:
+    #Then, create the secret using the password and salt
+    secret_string: str = password + data["salt"]
+    secret_hash: sha256 = sha256(secret_string.encode("utf-8"))
+    secret: bytes = b64encode(secret_hash.digest())
+    
+    #Next, create the response string using the secret and the challenge
+    response_string: str = secret.decode("utf-8") + data["challenge"]
+    response_hash: sha256 = sha256(response_string.encode("utf-8"))
+    response: bytes = b64encode(response_hash.digest())
+
+    #Finally, package it all into a dictionary and stringify it to be sent back to the websocket server
+    return json.dumps({"op": 1,
+                       "d": {
+                           "rpcVersion": 1,
+                           "authentication": response.decode("utf-8")
+                           }
+                       })
+    
+
+def getConfig(path: str) -> dict:
+    """Loads the configuration file for determining what MIDI messages do what actions."""
+    #Load using the proper library depending on extension
+    data: list
+    with open(path) as file:
         if path.endswith(".json"):
             data = json.load(file)
         elif path.endswith(".yaml"):
             data = yaml.safe_load(file)
         else:
             raise RuntimeError("Not a supported config format.")
-
-    config: dict = {"note_on": ddict(list),
-                     "note_off": ddict(list),
-                     "control_change": ddict(list)}
-
-    for command in data:
-        if command["trigger"] == "note":
-            if command["style"] == "open" or command["style"] == "latch":
-                config["note_on"][command["value"]].append(command)
-            if command["style"] == "close" or command["style"] == "latch":
-                config["note_off"][command["value"]].append(command)
-            if command["style"] == "mirror" and command["type"] == "mirrorSource":
-                config["note_on"][command["value"]].append({
-                    "type": "showSource",
-                    "target": command["target"],
-                    "trigger": command["trigger"],
-                    "style": "open",
-                    "value": command["value"]})
-                config["note_off"][command["value"]].append({
-                    "type": "hideSource",
-                    "target": command["target"],
-                    "trigger": command["trigger"],
-                    "style": "close",
-                    "value": command["value"]})
+    
+    #Divide the different types of midi messages into different buckets.
+    config: dict = {"note": [], "control": []}
+    for obj in data:
+        if obj["type"] == "note":
+            config["note"].append(obj)
+        elif obj["type"] == "control":
+            config["control"].append(obj)
         else:
-            config[command["trigger"]][command["value"]].append(command)
-            
+            raise RuntimeError(f"Invalid object type {obj['type']}.")
+        
     return config
+
+@contextmanager
+def openMidiPorts(name: str) -> Generator[tuple[mido.ports.BasePort, mido.ports.BasePort], None, None]:
+    """Opens input and output midi ports from the first port found based on the given name hint."""
+    #Type hints for returned values
+    ip: mido.ports.BasePort
+    op: mido.ports.BasePort
+    
+    #List of all valid ports that start with the name hint
+    inames: list = [i for i in mido.get_input_names() if i.startswith(name)]
+    onames: list = [o for o in mido.get_output_names() if o.startswith(name)]
+    ionames: list = [io for io in mido.get_ioport_names() if io.startswith(name)]
+    
+    #If the hint results in no valid ports being found, raise an error
+    if len(inames) == len(onames) == len(ionames) == 0:
+        raise OSError("No port found from name hint " + name + ".")
+    
+    #If an ioport exists, it should be used
+    if len(ionames) > 0:
+        ip = op = mido.open_ioport(ionames[0])
+    #Otherwise, fall back on a input and output port
+    #TODO: handle missing output
+    else:
+        ip = mido.open_input(inames[0])
+        op = mido.open_output(onames[0])
+
+    #Yield the ports, and close them on cleanup
+    try:
+        yield (ip, op)
+    finally:
+        ip.close()
+        op.close()
 
 class WebsocketHandler:
     """Wrapper for interacting with the OBS websocket."""
 
-    def __init__(self, path: str, port: str, debug: bool, password: str) -> None:
+    def __init__(self, port: str, password: str, path: str, debug: bool, nolatch: bool) -> None:
         """Initializes websocket handler with config from the path."""
-
+        #Store values from arguments (and generate config dictionary)
+        self.port: str = port
+        self.password: str = password
         self.config: dict = getConfig(path)
-        if debug == True:
-            print(f"Config: {self.config}")
-        self.port: str = ""
-        for option in mido.get_input_names():
-            if option.startswith(port):
-                self.port = option
-                break
-        if debug == True:
-            print(f"Port: {self.port}")
         self.debug: bool = debug
-
-        self._id: Generator[str, None, None] = Id()
-
-        self.obs: OBS = OBS(password)
-        self.requests: list[Request] = [] #type: ignore
-        self.responses: list[Response] = [] #type: ignore
-
-        self.requests.append(Request(
-            self._id, {"type": "GetAuthRequired"}, self.obs))
-
+        self.nolatch = nolatch
+        
+        if self.debug:
+            print(self.config)
+        
+        #Instantiate unique ID generator
+        self.uid: Generator[str, None, None] = Id()
+        
+        #Create data structures for the OBS and websocket message instance data
+        self.obs: OBS = OBS(self.uid)
+        self.events: list = []
+        self.requests: list = [{"op": 6, "d": {"requestType": "GetSceneList", "requestId": next(self.uid)}}]
+        self.requestResponses: list = []
+        self.requestBatches: list = [] #TODO: Implement request batching
+        self.requestBatchResponses: list = []
 
     async def read(self, websocket: websockets.WebSocketClientProtocol) -> None:
         """Asynchronously reads responses from the OBS websocket."""
 
         try:
             while True:
-                msg = await websocket.recv()
-                data = json.loads(msg)
+                #Whenever a message is received, add it to the list of server responses
+                msg: str = await websocket.recv()
+                data: dict = json.loads(msg)
                 if self.debug:
-                    print(data)
-                self.responses.append(Response(data, self.obs))
+                    print(f"Received {data}")
+                if data["op"] == 2:
+                    self.obs.locked = False #Unlock the OBS object on authentication verification
+                elif data["op"] == 5:
+                    self.events.append(data)
+                elif data["op"] == 7:
+                    self.requestResponses.append(data)
+                elif data["op"] == 9:
+                    self.requestBatchResponses.append(data)
+                else:
+                    print(f"Unexpected message with opcode {data['op']}.")
         except asyncio.CancelledError:
             return
-
-    async def send(self, websocket: websockets.WebSocketClientProtocol, request: list[dict]) -> None: #type: ignore
+        
+    async def send(self, websocket: websockets.WebSocketClientProtocol, msg: dict) -> None:
         """Asynchronously sends a request to the OBS websocket."""
 
         if self.debug:
-            print(request)
+            print(f"Sending {msg}")       
 
-        for msg in request:
-            await websocket.send(json.dumps(msg))
-            self.obs.pendingResponses[msg["message-id"]] = msg
+        await websocket.send(json.dumps(msg))
 
     async def run(self) -> NoReturn:
         """Connects to the OBS websocket and endlessly parses MIDI to handle requests and responses."""
-
-        with mido.open_input(self.port) as port:
+        #Aquire the bundled ports from the context manager...
+        with openMidiPorts(self.port) as ports:
+            iport: mido.ports.BasePort
+            oport: mido.ports.BasePort
+            #...and split them into their two respective port objects
+            iport, oport = ports
+            if self.debug:
+                print(f"Opened input {iport}.")
+                print(f"Opened output {oport}.")
+                
+            #Connect to the OBS websocket...
             async with websockets.connect("ws://localhost:4444") as websocket:
-
+                #...and handle the initial authentication handshake...
+                await websocket.send(authenticate(await websocket.recv(), self.password))
+                #...and create a task to check for new messages during downtime
                 readTask = asyncio.create_task(self.read(websocket))
+                #Oh, and since we shouldn't need the password anymore, lets ditch it
+                self.password = "" #TODO: proper password management system
 
                 while True:
+                    #Downtime so that reads can occur
                     await asyncio.sleep(0.1)
-                    for msg in port.iter_pending():
+                    
+                    #Check for and parse any messages from the MIDI input port
+                    for msg in iport.iter_pending():
                         self.parse(msg)
+                        
+                    #Update the OBS object based on incoming events
+                    for msg in self.events:
+                        self.obs.handle(msg)
+                        self.events.remove(msg)
+                    
+                    #Send out solo requests to the server (as long as the OBS object is not locked)
+                    if not self.obs.locked:
+                        for msg in self.requests:
+                            await self.send(websocket, msg)
+                            self.requests.remove(msg)
+                    
+                    #Update the OBS object based on responses to solo requests
+                    for msg in self.requestResponses:
+                        self.obs.handle(msg)
+                        self.requestResponses.remove(msg)
+                    
+                    #Send out batch requests to the server (as long as the OBS object is not locked)
+                    if not self.obs.locked:
+                        for msg in self.requestBatches:
+                            await self.send(websocket, msg)
+                            self.requestBatches.remove(msg)
+                    
+                    #Update the OBS object based on responses to batch requests
+                    for msg in self.requestBatchResponses:
+                        self.obs.handle(msg)
+                        self.requestBatchResponses.remove(msg)
+                        
+                    #Move all OBS object requests into the regular requests list (and add the unique id)...
+                    for msg in self.obs.requests:
+                        self.requests.append(msg)
+                        self.obs.requests.remove(msg)
+                    #and also for requests that any scenes have generated
+                    for scene in self.obs.scenes:
+                        for msg in scene.requests:
+                            self.requests.append(msg)
+                            scene.requests.remove(msg)                            
 
-                    for request in self.obs.requests:
-                        self.requests.append(Request(self._id, request, self.obs))
-                        self.obs.requests.remove(request)
-
-                    for request in self.requests:
-                        await self.send(websocket, request.format())
-                        self.requests.remove(request)
-
-                    for response in self.responses:
-                        response.handle()
-                        self.responses.remove(response)
-
+                #This might not be necessary? (unreachable code?)
                 await readTask
+            
 
     def parse(self, msg: mido.Message) -> None:
         """Parses MIDI message and creates requests based off of the loaded configuration."""
 
         if self.debug:
             print(msg)
-
-        trigger: str = msg.type
-        value: int = -1
-        data: int = -1
-
-        if trigger == "note_on" or trigger == "note_off":
-            value = msg.note
-            data = msg.velocity
-        elif trigger == "control_change":
-            value = msg.control
-            data = msg.value
+        
+        #Simplify the message type from the MIDI message...
+        mtype: str
+        if msg.type == "note_on" or msg.type == "note_off":
+            #If nolatch is active, do nothing if the type is note_off
+            if msg.type == "note_off":
+                return
+            mtype = "note"
+        elif msg.type == "control_change":
+            mtype = "control"
         else:
+            if self.debug:
+                print(f"Unhandled MIDI message with type {msg.type}.")
             return
-
-        for command in self.config[trigger][value]:
-            request = command.copy()
-            request["data"] = data
-            self.requests.append(Request(self._id, request, self.obs))
         
-        
+        #...aquire the channel...
+        channel: int = msg.channel
+        #...the value (which may have unique names in the MIDI message)...
+        value: int
+        if mtype == "note":
+            value = msg.note
+        elif mtype == "control":
+            value = msg.control
+        #...and any extra data (on/off for note, value for control, etc)
+        data: int
+        if mtype == "note":
+            data = 1 if msg.type == "note_on" else 0
+        elif mtype == "control":
+            data = msg.value
+            
+        #Check the config for any actions associated with the MIDI message and add them to the requests list
+        for obj in self.config[mtype]:
+            if obj["channel"] == channel and obj["value"] == value:
+                for action in self.obs.generateRequests(obj["actions"], data):
+                    self.requests.append({"op": 6,
+                                          "d": action})
+                
+    def pack(self, msg: dict) -> dict:
+        """Packages a message into a proper opcode with unique id."""
+        ...
 
 if __name__ == "__main__":
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
-    parser.add_argument("--config", type = str, default = "settings.yaml")
-    parser.add_argument("--port", type = str, default = "")
-    parser.add_argument("--debug", action = "store_true")
-    parser.add_argument("--password", type = str, default = "")
+    parser.add_argument("-p", "--port", type = str, default = "")
+    parser.add_argument("-P", "--password", type = str, default = "")
+    parser.add_argument("-c", "--config", type = str, default = "settings.yaml")
+    parser.add_argument("-d", "--debug", action = "store_true")
+    parser.add_argument("-n", "--nolatch", action = "store_true")
 
     args: argparse.Namespace = parser.parse_args()
 
-    websocketHandler: WebsocketHandler = WebsocketHandler(args.config, args.port, args.debug, args.password)
+    websocketHandler: WebsocketHandler = WebsocketHandler(args.port, args.password, args.config, args.debug, args.nolatch)
     asyncio.get_event_loop().run_until_complete(websocketHandler.run())
