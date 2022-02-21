@@ -116,6 +116,7 @@ class WebsocketHandler:
         self.config: dict = getConfig(path)
         self.debug: bool = debug
         self.nolatch = nolatch
+        self.latchState: bool = False
         
         if self.debug:
             print(self.config)
@@ -264,6 +265,9 @@ class WebsocketHandler:
         data: int
         if mtype == "note":
             data = 1 if msg.type == "note_on" else 0
+            if self.nolatch:
+                data = 1 if self.latchState else 0
+                self.latchState = not self.latchState
         elif mtype == "control":
             data = msg.value
             
