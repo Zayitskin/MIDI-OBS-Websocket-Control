@@ -245,7 +245,7 @@ class WebsocketHandler:
                         if watch.triggered:
                             watch.triggered = False
                             if watch.mtype == "SetSceneItemEnabled":
-                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value)
+                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value, velocity = 127)
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
