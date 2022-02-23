@@ -15,6 +15,7 @@ from typing import NoReturn
 from typing import Optional
 
 from structures import OBS
+from structures import Watch
 
 
 def Id() -> Generator[str, None, None]:
@@ -73,6 +74,15 @@ def getConfig(path: str) -> dict:
         
     return config
 
+def generateWatches(config: dict) -> list[Watch]:
+    
+    watches: list[Watch] = []
+    for cfg in config["note"]:
+        for action in cfg["actions"]:
+            watches.append(Watch(action["target"], cfg["value"], action["type"]))
+            
+    return watches
+
 @contextmanager
 def openMidiPorts(name: str) -> Generator[tuple[mido.ports.BasePort, mido.ports.BasePort], None, None]:
     """Opens input and output midi ports from the first port found based on the given name hint."""
@@ -126,6 +136,7 @@ class WebsocketHandler:
         
         #Create data structures for the OBS and websocket message instance data
         self.obs: OBS = OBS(self.uid)
+        self.obs.watches = generateWatches(self.config)
         self.events: list = []
         self.requests: list = [{"op": 6, "d": {"requestType": "GetSceneList", "requestId": next(self.uid)}}]
         self.requestResponses: list = []
@@ -227,7 +238,17 @@ class WebsocketHandler:
                     for scene in self.obs.scenes:
                         for msg in scene.requests:
                             self.requests.append(msg)
-                            scene.requests.remove(msg)                            
+                            scene.requests.remove(msg)
+                            
+                    #Run any necessary actions for triggered Watches
+                    for watch in self.obs.watches:
+                        if watch.triggered:
+                            watch.triggered = False
+                            if watch.mtype == "SetSceneItemEnabled":
+                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value)
+                                if self.debug:
+                                    print(f"Sending {msg}")
+                                oport.send(msg)
 
                 #This might not be necessary? (unreachable code?)
                 await readTask
@@ -264,7 +285,7 @@ class WebsocketHandler:
         #...and any extra data (on/off for note, value for control, etc)
         data: int
         if mtype == "note":
-            data = 1 if msg.type == "note_on" else 0
+            data = 0 if msg.type == "note_off" or msg.velocity == 0 else 1
             if self.nolatch:
                 data = 1 if self.latchState else 0
                 self.latchState = not self.latchState

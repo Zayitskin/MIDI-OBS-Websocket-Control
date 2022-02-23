@@ -5,6 +5,16 @@ from typing import Optional
 
 from messages import handleEvent, handleResponse
 
+class Watch:
+    
+    def __init__(self, name: str, value: int, mtype: str) -> None:
+        
+        self.name: str = name
+        self.value: int = value
+        self.mtype: str = mtype
+        self.data: str = ""
+        self.triggered: bool = False
+
 class OBS:
     """Data container for information pertaining to the current state of OBS."""
 
@@ -21,6 +31,8 @@ class OBS:
         
         self.requests: list[dict] = []
         
+        self.watches: list[Watch] = []
+        
     def handle(self, msg: dict) -> None:
         """Update data based on incoming messages."""
         if msg["op"] == 5:
@@ -36,16 +48,15 @@ class OBS:
         reqs: list[dict] = []
         for msg in msgs:
             if msg["type"] == "SetSceneItemEnabled":
-                for scene in self.scenes:
-                    for source in scene.sources:
-                        if source.name == msg["target"]:
-                            reqs.append({"requestType": msg["type"],
-                                         "requestId": next(self.uid),
-                                         "requestData": {
-                                             "sceneName": scene.name,
-                                             "sceneItemId": source.siid,
-                                             "sceneItemEnabled": True if data == 1 else False}
-                                         })
+                for source in self.currentScene.sources:
+                    if source.name == msg["target"]:
+                        reqs.append({"requestType": msg["type"],
+                                     "requestId": next(self.uid),
+                                     "requestData": {
+                                         "sceneName": self.currentScene.name,
+                                         "sceneItemId": source.siid,
+                                         "sceneItemEnabled": True if data == 1 else False}
+                                     })
                             
             elif msg["type"] == "SetCurrentProgramScene":
                 target: str = msg["target"]

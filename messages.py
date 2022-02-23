@@ -46,6 +46,12 @@ def handleEvent(obs: "OBS", msg: dict) -> None:
     
     elif mtype == "CurrentProgramSceneChanged":
         obs.setCurrentScene(data["sceneName"])
+        for source in obs.currentScene.sources:
+            for watch in obs.watches:
+                if source.name == watch.name:
+                    watch.triggered = True
+                    watch.data = "1" if source.enabled else "0"
+                    
     
     elif mtype == "CurrentPreviewSceneChanged":
         pass
@@ -405,6 +411,11 @@ def handleResponse(obs: "OBS", msg: dict) -> None:
     elif mtype == "GetSceneItemEnabled":
         scene, source, _ = rid.split("_")
         obs.getScene(scene).getSource(source).setVisible(data["sceneItemEnabled"])
+        if obs.getScene(scene) == obs.currentScene:
+            for watch in obs.watches:
+                if source == watch.name:
+                    watch.triggered = True
+                    watch.data = "1" if obs.currentScene.getSource(source).enabled else "0"                    
     
     elif mtype == "SetSceneItemEnabled":
         pass
