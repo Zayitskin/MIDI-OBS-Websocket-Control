@@ -109,7 +109,15 @@ def handleEvent(obs: "OBS", msg: dict) -> None:
         pass
     
     elif mtype == "SceneItemEnableStateChanged":
-        pass
+        scene: "Scene" = obs.getScene(data["sceneName"])
+        source: "Source" = scene.getSourceById(data["sceneItemId"])
+        source.setVisible(data["sceneItemEnabled"])
+        
+        if scene == obs.currentScene:
+            for watch in obs.watches:
+                if source.name == watch.name:
+                    watch.triggered = True
+                    watch.data = "1" if source.enabled else "0"
     
     elif mtype == "SceneItemLockStateChanged":
         pass

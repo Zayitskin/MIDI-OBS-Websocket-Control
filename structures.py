@@ -14,6 +14,10 @@ class Watch:
         self.mtype: str = mtype
         self.data: str = ""
         self.triggered: bool = False
+        
+    def __str__(self) -> str:
+        
+        return f"Watch: {self.name} {self.value} {self.mtype} {self.data=}"
 
 class OBS:
     """Data container for information pertaining to the current state of OBS."""
@@ -138,6 +142,13 @@ class Scene:
             if source.name == name:
                 return source
         return None
+    
+    def getSourceById(self, siid: int) -> Optiona["Source"]:
+        """Returns reference to source with given id, if it exists."""
+        for source in self.sources:
+            if source.siid == siid:
+                return source
+        return None        
 
 
 class Source:
