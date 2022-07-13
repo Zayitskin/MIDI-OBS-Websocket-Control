@@ -247,7 +247,7 @@ class WebsocketHandler:
                                 print(f"{watch} triggered.")
                             watch.triggered = False
                             if watch.mtype == "SetSceneItemEnabled":
-                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value, velocity = 127)
+                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value, velocity = 1)
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
@@ -267,6 +267,11 @@ class WebsocketHandler:
         if msg.type == "note_on" or msg.type == "note_off":
             #If nolatch is active, do nothing if the type is note_off
             if self.nolatch and msg.type == "note_off":
+                return
+            #If the velocity is {SPECIFIC_WATCH_VELOCITY}, ignore message
+            if msg.velocity == 1:
+                if self.debug:
+                    print(f"Skipping parsing of internal message: {msg}.")
                 return
             mtype = "note"
         elif msg.type == "control_change":
