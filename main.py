@@ -137,6 +137,7 @@ class WebsocketHandler:
         #Create data structures for the OBS and websocket message instance data
         self.obs: OBS = OBS(self.uid)
         self.obs.watches = generateWatches(self.config)
+        self.ignores: list = []
         self.events: list = []
         self.requests: list = [{"op": 6, "d": {"requestType": "GetSceneList", "requestId": next(self.uid)}}]
         self.requestResponses: list = []
@@ -247,10 +248,11 @@ class WebsocketHandler:
                                 print(f"{watch} triggered.")
                             watch.triggered = False
                             if watch.mtype == "SetSceneItemEnabled":
-                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value, velocity = 1)
+                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value, velocity = 127)
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
+                                self.ignores.append(msg)
 
                 #This might not be necessary? (unreachable code?)
                 await readTask
@@ -268,10 +270,11 @@ class WebsocketHandler:
             #If nolatch is active, do nothing if the type is note_off
             if self.nolatch and msg.type == "note_off":
                 return
-            #If the velocity is {SPECIFIC_WATCH_VELOCITY}, ignore message
-            if msg.velocity == 1:
+            #If the message matches one in the ignore list, ignore it (and remove it from the list)
+            if msg in self.ignores:
                 if self.debug:
-                    print(f"Skipping parsing of internal message: {msg}.")
+                    print(f"Skipping echo of sent message: {msg}.")
+                self.ignores.remove(msg)
                 return
             mtype = "note"
         elif msg.type == "control_change":
