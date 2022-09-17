@@ -252,7 +252,10 @@ class WebsocketHandler:
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
-                                self.ignores.append(msg)
+                                if msg.type == "note_on":
+                                    self.ignores.append(msg)
+                                elif msg.type == "note_off":
+                                    self.ignores.append(mido.Message("note_on", note = msg.note, velocity = 0))
 
                 #This might not be necessary? (unreachable code?)
                 await readTask
