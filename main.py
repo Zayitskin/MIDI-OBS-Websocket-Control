@@ -248,14 +248,12 @@ class WebsocketHandler:
                                 print(f"{watch} triggered.")
                             watch.triggered = False
                             if watch.mtype == "SetSceneItemEnabled":
-                                msg = mido.Message("note_on" if watch.data == "1" else "note_off", note = watch.value, velocity = 127)
+                                msg = mido.Message("note_on", note = watch.value, velocity = 127 if watch.data == "1" else 0)
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
                                 if msg.type == "note_on":
                                     self.ignores.append(msg)
-                                elif msg.type == "note_off":
-                                    self.ignores.append(mido.Message("note_on", note = msg.note, velocity = 0))
 
                 #This might not be necessary? (unreachable code?)
                 await readTask
