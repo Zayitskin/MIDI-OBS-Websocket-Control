@@ -252,8 +252,7 @@ class WebsocketHandler:
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
-                                if msg.type == "note_on":
-                                    pass #self.ignores.append(msg) There is something weird going on
+                                self.ignores.append(msg)
 
                 #This might not be necessary? (unreachable code?)
                 await readTask
