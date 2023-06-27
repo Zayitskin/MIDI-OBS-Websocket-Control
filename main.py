@@ -252,7 +252,7 @@ class WebsocketHandler:
                                 if self.debug:
                                     print(f"Sending {msg}")
                                 oport.send(msg)
-                                self.ignores.append(msg)
+                                #self.ignores.append(msg)
 
                 #This might not be necessary? (unreachable code?)
                 await readTask
@@ -295,7 +295,9 @@ class WebsocketHandler:
         #...and any extra data (on/off for note, value for control, etc)
         data: int
         if mtype == "note":
-            data = 0 if msg.type == "note_off" or msg.velocity == 0 else 1
+            data = 0
+            if msg.velocity == 127:
+                data = 1
             if self.nolatch:
                 data = 1 if self.latchState else 0
                 self.latchState = not self.latchState
